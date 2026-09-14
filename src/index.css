@@ -1,0 +1,86 @@
+/* @import url() FONT IMPORTS MUST ALWAYS BE AT THE VERY TOP OF THIS FILE, ABOVE THE TAILWIND IMPORTS — DO NOT DELETE THIS COMMENT */
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900&family=Cairo:wght@400;600;700;900&display=swap');
+
+/* CRITICAL: THE FOLLOWING TAILWIND IMPORTS MUST NEVER BE DELETED OR REORDERED — DO NOT DELETE THIS COMMENT */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* END TAILWIND IMPORTS — ALL OTHER CSS MUST GO BELOW THIS LINE */
+
+:root {
+  --accent: #b8ff3c;
+  --accent-deep: #6c9c10;
+  --accent-ink: #0a0819;
+}
+[data-accent='cyan'] {
+  --accent: #22e4f5;
+  --accent-deep: #0c8b97;
+  --accent-ink: #04222a;
+}
+[data-accent='magenta'] {
+  --accent: #ff3dcb;
+  --accent-deep: #a1157c;
+  --accent-ink: #24001a;
+}
+[data-accent='amber'] {
+  --accent: #ffc93c;
+  --accent-deep: #a87a00;
+  --accent-ink: #241800;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background-color: #05040f;
+  color: #f4f1ff;
+  -webkit-font-smoothing: antialiased;
+}
+[dir='rtl'] body,
+[dir='rtl'] .font-display {
+  font-family: 'Cairo', 'Nunito', sans-serif;
+}
+.retro-grid {
+  background-image:
+    linear-gradient(rgba(155, 107, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(155, 107, 255, 0.11) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.035) 0px,
+    rgba(255, 255, 255, 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.text-glow {
+  text-shadow: 0 0 18px rgba(184, 255, 60, 0.35);
+}
+::selection {
+  background: var(--accent);
+  color: #05040f;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
