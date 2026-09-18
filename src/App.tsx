@@ -8,6 +8,7 @@ import { FavoritesProvider } from './contexts/FavoritesContext';
 import { LocaleProvider, type AccentName } from './contexts/LocaleContext';
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
 import { OrderProvider } from './contexts/OrderContext';
+import { PaymentProvider } from './contexts/PaymentContext';
 import { Address } from './pages/Address';
 import { Auth } from './pages/Auth';
 import { Cart } from './pages/Cart';
@@ -77,33 +78,35 @@ function ScreenRouter() {
 }
 
 interface AppProps {
-  /** Interface language — Arabic also flips the whole layout to RTL. */
+  /** Interface language — Egyptian Arabic is the default and flips the layout to RTL. */
   language?: Locale;
-  /** Neon accent that repaints every primary action across the app. */
+  /** Neon accent that repaints every primary action across the app. Green ships unlocked. */
   accent?: AccentName;
   /** Start on the welcome + sign-up flow, or drop straight into the shop. */
   startAtOnboarding?: boolean;
 }
 
-export function App({ language = 'en', accent = 'lime', startAtOnboarding = true }: AppProps) {
+export function App({ language = 'ar', accent = 'lime', startAtOnboarding = true }: AppProps) {
   return (
     <LocaleProvider initialLocale={language} initialAccent={accent}>
       <AuthProvider>
         <AddressProvider>
-          <FavoritesProvider>
-            <CartProvider>
-              <OrderProvider>
-                <NavigationProvider
-                  key={startAtOnboarding ? 'welcome' : 'home'}
-                  initialScreen={startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
-                  
-                  <AppShell>
-                    <ScreenRouter />
-                  </AppShell>
-                </NavigationProvider>
-              </OrderProvider>
-            </CartProvider>
-          </FavoritesProvider>
+          <PaymentProvider>
+            <FavoritesProvider>
+              <CartProvider>
+                <OrderProvider>
+                  <NavigationProvider
+                    key={startAtOnboarding ? 'welcome' : 'home'}
+                    initialScreen={startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
+                    
+                    <AppShell>
+                      <ScreenRouter />
+                    </AppShell>
+                  </NavigationProvider>
+                </OrderProvider>
+              </CartProvider>
+            </FavoritesProvider>
+          </PaymentProvider>
         </AddressProvider>
       </AuthProvider>
     </LocaleProvider>);

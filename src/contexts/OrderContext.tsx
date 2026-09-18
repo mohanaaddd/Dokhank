@@ -19,7 +19,8 @@ const seededOrders: Order[] = [
   status: 'delivered',
   placedAt: Date.now() - 2 * DAY,
   etaMinutes: 22,
-  courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' }
+  courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' },
+  paymentMethodId: 'pay_cash'
 },
 {
   id: 'ord_eg1907',
@@ -34,7 +35,8 @@ const seededOrders: Order[] = [
   status: 'delivered',
   placedAt: Date.now() - 11 * DAY,
   etaMinutes: 31,
-  courier: { name: 'Karim', vehicle: 'Scooter, MZ-08', initials: 'KM' }
+  courier: { name: 'Karim', vehicle: 'Scooter, MZ-08', initials: 'KM' },
+  paymentMethodId: 'pay_visa'
 }];
 
 
@@ -50,12 +52,15 @@ interface PlaceOrderInput {
   subtotal: number;
   deliveryFee: number;
   address: DeliveryAddress;
+  paymentMethodId: string;
 }
 
 interface OrderContextValue {
   orders: Order[];
   activeOrder: Order | null;
   status: AsyncStatus;
+  /** Completed deliveries — drives the accent unlock tiers. */
+  deliveredCount: number;
   placeOrder: (input: PlaceOrderInput) => Promise<Order>;
   getOrder: (id: string) => Order | undefined;
 }
@@ -83,7 +88,8 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
       status: 'confirmed',
       placedAt: Date.now(),
       etaMinutes: input.address.etaMinutes,
-      courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' }
+      courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' },
+      paymentMethodId: input.paymentMethodId
     };
 
     setOrders((prev) => [order, ...prev]);
@@ -106,15 +112,21 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
     [orders]
   );
 
+  const deliveredCount = useMemo(
+    () => orders.filter((order) => order.status === 'delivered').length,
+    [orders]
+  );
+
   const value = useMemo<OrderContextValue>(
     () => ({
       orders,
       activeOrder,
       status,
+      deliveredCount,
       placeOrder,
       getOrder: (id: string) => orders.find((order) => order.id === id)
     }),
-    [orders, activeOrder, status, placeOrder]
+    [orders, activeOrder, status, deliveredCount, placeOrder]
   );
 
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;

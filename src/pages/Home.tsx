@@ -110,17 +110,6 @@ export function Home() {
           </Panel>
         </section>
 
-        <section className="px-4 pt-6" aria-label={t('home.categories')}>
-          <h2 className="mb-3 font-display text-[11px] tracking-[0.2em] text-white/45">
-            {t('home.categories')}
-          </h2>
-          <CategoryRail
-            value={category}
-            locale={locale}
-            onChange={(value) => setCategory(value === 'favorites' ? 'all' : value)} />
-          
-        </section>
-
         {status === 'success' && buyAgain.length > 0 &&
         <section className="pt-6" aria-label={t('home.restock')}>
             <div className="px-4">
@@ -144,6 +133,17 @@ export function Home() {
             </ul>
           </section>
         }
+
+        <section className="px-4 pt-6" aria-label={t('home.categories')}>
+          <h2 className="mb-3 font-display text-[11px] tracking-[0.2em] text-white/45">
+            {t('home.categories')}
+          </h2>
+          <CategoryRail
+            value={category}
+            locale={locale}
+            onChange={(value) => setCategory(value === 'favorites' ? 'all' : value)} />
+          
+        </section>
 
         <section className="px-4 pb-6 pt-6">
           <div className="mb-3 flex items-baseline justify-between">

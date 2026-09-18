@@ -121,7 +121,7 @@ export function Location() {
 
         <button
           type="button"
-          onClick={() => navigate({ name: 'address' })}
+          onClick={() => navigate({ name: 'address', intent: 'new' })}
           className="mt-2 flex w-full items-center justify-center gap-2 rounded-chunk border border-dashed border-ink-600 py-3 text-sm font-bold text-white/55 transition-colors duration-150 hover:border-accent/50 hover:text-accent">
           
           <PlusIcon className="h-4 w-4" />

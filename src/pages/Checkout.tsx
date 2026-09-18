@@ -1,36 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppleIcon, BanknoteIcon, CreditCardIcon, InfoIcon, MapPinIcon } from 'lucide-react';
+import { InfoIcon, MapPinIcon } from 'lucide-react';
 import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { OrderSummary } from '../components/cart/OrderSummary';
 import { ScreenHeader } from '../components/layout/ScreenHeader';
+import { PAYMENT_ICONS } from '../data/payments';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useOrders } from '../contexts/OrderContext';
+import { usePayments } from '../contexts/PaymentContext';
 import { formatPrice, localize } from '../utils/format';
-
-type PaymentMethod = 'cash' | 'card' | 'apple';
-
-const methods: Array<{id: PaymentMethod;icon: typeof BanknoteIcon;}> = [
-{ id: 'cash', icon: BanknoteIcon },
-{ id: 'card', icon: CreditCardIcon },
-{ id: 'apple', icon: AppleIcon }];
-
+import { paymentNote, paymentTitle } from '../utils/payment';
 
 export function Checkout() {
   const { t } = useTranslation();
   const { locale } = useLocale();
+  const { user } = useAuth();
   const { back, navigate, replace } = useNavigation();
   const { lines, resolve, subtotal, deliveryFee, total, address, clear } = useCart();
   const { placeOrder, status } = useOrders();
-  const [method, setMethod] = useState<PaymentMethod>('cash');
+  const { methods, defaultId } = usePayments();
+  const [method, setMethod] = useState<string>(defaultId);
+
+  /** The default method is always the one preselected when checkout opens. */
+  useEffect(() => setMethod(defaultId), [defaultId]);
 
   const placing = status === 'loading';
 
   const submit = async () => {
     if (!address) return;
-    const order = await placeOrder({ lines, subtotal, deliveryFee, address });
+    const order = await placeOrder({
+      lines,
+      subtotal,
+      deliveryFee,
+      address,
+      paymentMethodId: method
+    });
     clear();
     replace({ name: 'tracking', orderId: order.id });
   };
@@ -76,6 +83,7 @@ export function Checkout() {
           <ul className="flex flex-col gap-2">
             {methods.map((entry) => {
               const isActive = method === entry.id;
+              const Icon = PAYMENT_ICONS[entry.kind];
               return (
                 <li key={entry.id}>
                   <button
@@ -95,14 +103,21 @@ export function Checkout() {
                       isActive ? 'bg-accent text-ink-950' : 'bg-ink-700 text-white/50'].
                       join(' ')}>
                       
-                      <entry.icon className="h-5 w-5" strokeWidth={2.2} />
+                      <Icon className="h-5 w-5" strokeWidth={2.2} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-extrabold text-white">
-                        {t(`checkout.${entry.id}`)}
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-[15px] font-extrabold text-white">
+                          {paymentTitle(entry, t)}
+                        </span>
+                        {entry.id === defaultId &&
+                        <span className="shrink-0 rounded-full border border-accent/50 px-1.5 py-0.5 font-display text-[8px] tracking-[0.14em] text-accent">
+                            {t('payment.default')}
+                          </span>
+                        }
                       </span>
-                      <span className="block truncate text-xs text-white/45">
-                        {t(`checkout.${entry.id}Note`)}
+                      <span className="block truncate text-xs text-white/45" dir="auto">
+                        {paymentNote(entry, t, user?.phone)}
                       </span>
                     </span>
                     <span

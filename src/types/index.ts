@@ -59,6 +59,19 @@ export interface DeliveryAddress {
   landmark?: string;
 }
 
+export type PaymentKind = 'cash' | 'card' | 'instapay';
+
+export interface PaymentMethod {
+  id: string;
+  kind: PaymentKind;
+  brand?: string;
+  last4?: string;
+  expiry?: string;
+  phone?: string;
+  /** Cash on delivery is a system method and can never be deleted. */
+  removable: boolean;
+}
+
 export type OrderStatus = 'confirmed' | 'packing' | 'on_the_way' | 'delivered';
 
 export const ORDER_FLOW: OrderStatus[] = ['confirmed', 'packing', 'on_the_way', 'delivered'];
@@ -74,6 +87,7 @@ export interface Order {
   placedAt: number;
   etaMinutes: number;
   courier: {name: string;vehicle: string;initials: string;};
+  paymentMethodId: string;
 }
 
 export interface UserProfile {
@@ -96,8 +110,9 @@ export type Screen =
 {name: 'search';} |
 {name: 'product';productId: string;} |
 {name: 'cart';} |
-{name: 'location';} |
-{name: 'address';} |
+{name: 'location';}
+/** `intent: 'new'` skips the saved list and opens the form directly. */ |
+{name: 'address';intent?: 'new';} |
 {name: 'checkout';} |
 {name: 'tracking';orderId: string;} |
 {name: 'delivered';orderId: string;} |

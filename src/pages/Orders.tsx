@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AnimatePresence } from 'framer-motion';
 import { BikeIcon, PackageIcon, ReceiptTextIcon } from 'lucide-react';
 import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
 import { ScreenHeader } from '../components/layout/ScreenHeader';
+import { ReceiptSheet } from '../components/order/ReceiptSheet';
 import { products } from '../data/products';
 import { useCart } from '../contexts/CartContext';
 import { useLocale } from '../contexts/LocaleContext';
@@ -22,7 +24,9 @@ export function Orders() {
   const { back, navigate } = useNavigation();
   const { orders } = useOrders();
   const { add } = useCart();
+  const [receiptId, setReceiptId] = useState<string | null>(null);
 
+  const receiptOrder = orders.find((order) => order.id === receiptId) ?? null;
   const active = orders.filter((order) => order.status !== 'delivered');
   const past = orders.filter((order) => order.status === 'delivered');
 
@@ -103,6 +107,7 @@ export function Orders() {
           }
           <button
             type="button"
+            onClick={() => setReceiptId(order.id)}
             className="flex items-center gap-1.5 rounded-2xl border border-ink-600 px-3 text-xs font-bold text-white/55 transition-colors duration-150 hover:border-ink-500 hover:text-white">
             
             <ReceiptTextIcon className="h-4 w-4" />
@@ -151,6 +156,12 @@ export function Orders() {
           </div>
         }
       </div>
+
+      <AnimatePresence>
+        {receiptOrder &&
+        <ReceiptSheet order={receiptOrder} onClose={() => setReceiptId(null)} />
+        }
+      </AnimatePresence>
     </div>);
 
 }

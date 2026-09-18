@@ -4,12 +4,20 @@ import { motion } from 'framer-motion';
 import { BanknoteIcon, BikeIcon, ShieldCheckIcon } from 'lucide-react';
 import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
+import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
+import type { Locale } from '../types';
+
+const LANGUAGES: Array<{id: Locale;label: string;}> = [
+{ id: 'en', label: 'English' },
+{ id: 'ar', label: 'مصري' }];
+
 
 const HERO = "/2423e913-3666-48a0-9c90-f213c8bf7ba0.jpg";
 
 export function Welcome() {
   const { t } = useTranslation();
+  const { locale, setLocale } = useLocale();
   const { navigate } = useNavigation();
 
   const points = [
@@ -24,6 +32,29 @@ export function Welcome() {
         <img src={HERO} alt="" aria-hidden className="h-full w-full object-cover opacity-70" />
         <div className="absolute inset-0 bg-ink-950/45" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-ink-900 to-transparent" />
+      </div>
+
+      <div
+        role="group"
+        aria-label={t('welcome.languageLabel')}
+        className="absolute end-5 top-5 z-10 flex items-center gap-1 rounded-full border border-white/15 bg-ink-950/75 p-1 backdrop-blur-sm">
+        
+        {LANGUAGES.map((entry) =>
+        <button
+          key={entry.id}
+          type="button"
+          onClick={() => setLocale(entry.id)}
+          aria-pressed={locale === entry.id}
+          className={[
+          'rounded-full px-3 py-1.5 text-[12px] font-extrabold transition-colors duration-150 ease-pop',
+          locale === entry.id ?
+          'bg-accent text-ink-950' :
+          'text-white/60 hover:text-white'].
+          join(' ')}>
+          
+            {entry.label}
+          </button>
+        )}
       </div>
 
       <div className="relative flex flex-1 flex-col justify-end px-6 pb-8 pt-14">

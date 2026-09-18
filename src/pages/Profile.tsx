@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  BanknoteIcon,
   BellIcon,
   BikeIcon,
   ChevronRightIcon,
@@ -13,26 +12,20 @@ import {
   MessageCircleIcon,
   PackageIcon,
   PhoneIcon,
-  PlusIcon,
-  ShieldCheckIcon,
-  SmartphoneIcon } from
+  ShieldCheckIcon } from
 'lucide-react';
 import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
+import { Toggle } from '../components/ui/Toggle';
+import { AccentPicker } from '../components/profile/AccentPicker';
+import { PaymentMethodsPanel } from '../components/profile/PaymentMethodsPanel';
 import { useAddresses } from '../contexts/AddressContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useLocale, type AccentName } from '../contexts/LocaleContext';
+import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useOrders } from '../contexts/OrderContext';
 import { formatNumber, orderCode } from '../utils/format';
 import type { Locale } from '../types';
-
-const accents: Array<{id: AccentName;color: string;}> = [
-{ id: 'lime', color: '#B8FF3C' },
-{ id: 'cyan', color: '#22E4F5' },
-{ id: 'magenta', color: '#FF3DCB' },
-{ id: 'amber', color: '#FFC93C' }];
-
 
 const languages: Array<{id: Locale;label: string;}> = [
 { id: 'en', label: 'English' },
@@ -41,32 +34,9 @@ const languages: Array<{id: Locale;label: string;}> = [
 
 type PanelId = 'payment' | 'notifications' | 'help';
 
-function Toggle({ checked, onChange, label }: {checked: boolean;onChange: () => void;label: string;}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={[
-      'relative h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 ease-pop',
-      checked ? 'border-accent bg-accent/30' : 'border-ink-600 bg-ink-700'].
-      join(' ')}>
-      
-      <span
-        className={[
-        'absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full transition-[left] duration-200 ease-pop',
-        checked ? 'left-[26px] bg-accent' : 'left-[3px] bg-white/50'].
-        join(' ')} />
-      
-    </button>);
-
-}
-
 export function Profile() {
   const { t } = useTranslation();
-  const { locale, setLocale, accent, setAccent } = useLocale();
+  const { locale, setLocale } = useLocale();
   const { user, signOut } = useAuth();
   const { orders, activeOrder } = useOrders();
   const { addresses } = useAddresses();
@@ -164,27 +134,7 @@ export function Profile() {
         </div>
       </section>
 
-      <section className="mt-6 text-center">
-        <h2 className="mb-3 font-display text-[11px] tracking-[0.2em] text-white/45">
-          {t('profile.accent')}
-        </h2>
-        <div className="flex justify-center gap-4">
-          {accents.map((entry) =>
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => setAccent(entry.id)}
-            aria-label={entry.id}
-            aria-pressed={accent === entry.id}
-            className={[
-            'h-12 w-12 rounded-2xl border-2 transition-transform duration-150 ease-pop active:scale-90',
-            accent === entry.id ? 'border-white' : 'border-transparent'].
-            join(' ')}
-            style={{ backgroundColor: entry.color, boxShadow: `0 0 18px -4px ${entry.color}` }} />
-
-          )}
-        </div>
-      </section>
+      <AccentPicker />
 
       <section className="-mx-2 mt-7">
         <h2 className="mb-3 px-2 font-display text-[11px] tracking-[0.2em] text-white/45">
@@ -248,46 +198,7 @@ export function Profile() {
                 transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                 className="overflow-hidden bg-ink-900/60">
                 
-                  <ul className="flex flex-col gap-2 px-4 py-4">
-                    {[
-                  { id: 'Cash', Icon: BanknoteIcon, title: t('profile.paymentCash'), note: t('profile.paymentCashNote'), active: true },
-                  { id: 'Card', Icon: CreditCardIcon, title: t('profile.paymentCard'), note: t('profile.paymentCardNote'), active: false },
-                  {
-                    id: 'Instapay',
-                    Icon: SmartphoneIcon,
-                    title: t('profile.paymentInstapay'),
-                    note: t('profile.paymentInstapayNote', { phone: user?.phone ?? '' }),
-                    active: false
-                  }].
-                  map((method) =>
-                  <li
-                    key={method.id}
-                    className={[
-                    'flex items-center gap-3 rounded-2xl border px-3 py-2.5',
-                    method.active ? 'border-accent/50 bg-accent/10' : 'border-ink-600 bg-ink-800/60'].
-                    join(' ')}>
-                    
-                        <method.Icon
-                      className={['h-4 w-4 shrink-0', method.active ? 'text-accent' : 'text-white/45'].join(' ')} />
-                    
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-bold text-white">{method.title}</span>
-                          <span className="block truncate text-xs text-white/40" dir="auto">
-                            {method.note}
-                          </span>
-                        </span>
-                      </li>
-                  )}
-                    <li>
-                      <button
-                      type="button"
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-600 py-2.5 text-xs font-bold text-white/50 transition-colors duration-150 hover:border-accent/50 hover:text-accent">
-                      
-                        <PlusIcon className="h-4 w-4" />
-                        {t('profile.paymentAdd')}
-                      </button>
-                    </li>
-                  </ul>
+                  <PaymentMethodsPanel />
                 </motion.div>
               }
             </AnimatePresence>
