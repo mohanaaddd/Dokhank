@@ -1,10 +1,15 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_PAYMENT_ID, paymentMethods as seeded } from '../data/payments';
+import { paymentFromRow } from '../lib/mappers';
+import type { PaymentMethodRow } from '../lib/rows';
+import { supabase } from '../lib/supabase';
+import { isLive } from '../lib/supabaseConfig';
+import { useAuth } from './AuthContext';
 import type { PaymentMethod } from '../types';
 
 interface PaymentContextValue {
   methods: PaymentMethod[];
-  /** The method preselected in settings and at checkout. */
+  /** The method preselected in settings and at checkout. Always resolvable. */
   defaultId: string;
   setDefaultMethod: (id: string) => void;
   removeMethod: (id: string) => void;
@@ -14,39 +19,83 @@ interface PaymentContextValue {
 
 const PaymentContext = createContext<PaymentContextValue | null>(null);
 
+const METHOD_SELECT = 'id,kind,brand,last4,expiry,phone,removable,is_default';
+
+/** Demo card details — Paymob tokenisation replaces this when cards go live. */
+const DEMO_CARD = { brand: 'Mastercard', expiry: '11/29' };
+
 export function PaymentProvider({ children }: {children: React.ReactNode;}) {
+  const { user } = useAuth();
   const [methods, setMethods] = useState<PaymentMethod[]>(seeded);
   const [defaultId, setDefaultId] = useState<string>(DEFAULT_PAYMENT_ID);
 
-  const setDefaultMethod = useCallback((id: string) => setDefaultId(id), []);
+  const hydrate = useCallback(async () => {
+    const { data } = await supabase.from('payment_methods').select(METHOD_SELECT).order('created_at');
+    if (!data) return;
+    const rows = data as unknown as PaymentMethodRow[];
+    if (rows.length === 0) return;
+    setMethods(rows.map(paymentFromRow));
+    setDefaultId((rows.find((row) => row.is_default) ?? rows[0]).id);
+  }, []);
+
+  useEffect(() => {
+    if (!isLive || !user) return;
+    void hydrate();
+  }, [isLive, user, hydrate]);
+
+  const setDefaultMethod = useCallback((id: string) => {
+    setDefaultId(id);
+    if (isLive && user) {
+      void supabase.rpc('fn_set_default_payment_method', { p_method_id: id });
+    }
+  }, [user]);
 
   const removeMethod = useCallback(
     (id: string) => {
       setMethods((prev) => {
-        const next = prev.filter((entry) => entry.id !== id || !entry.removable);
-        setDefaultId((current) =>
-        current === id ? next[0]?.id ?? DEFAULT_PAYMENT_ID : current
-        );
+        const target = prev.find((entry) => entry.id === id);
+        if (!target || !target.removable) return prev;
+        const next = prev.filter((entry) => entry.id !== id);
+        setDefaultId((current) => current === id ? next[0]?.id ?? current : current);
         return next;
       });
+      if (isLive && user) {
+        void supabase.rpc('fn_delete_payment_method', { p_method_id: id }).then(() => hydrate());
+      }
     },
-    []
+    [user, hydrate]
   );
 
   const addCard = useCallback(() => {
     const last4 = String(Math.floor(1000 + Math.random() * 9000));
-    setMethods((prev) => [
-    ...prev,
-    {
-      id: `pay_${Date.now().toString(36)}`,
+
+    if (!isLive || !user) {
+      setMethods((prev) => [
+      ...prev,
+      {
+        id: `pay_${Date.now().toString(36)}`,
+        kind: 'card',
+        brand: DEMO_CARD.brand,
+        last4,
+        expiry: DEMO_CARD.expiry,
+        removable: true
+      }]
+      );
+      return;
+    }
+
+    void supabase.
+    from('payment_methods').
+    insert({
+      user_id: user.id,
       kind: 'card',
-      brand: 'Mastercard',
+      brand: DEMO_CARD.brand,
       last4,
-      expiry: '11/29',
+      expiry: DEMO_CARD.expiry,
       removable: true
-    }]
-    );
-  }, []);
+    }).
+    then(() => hydrate());
+  }, [user, hydrate]);
 
   const value = useMemo<PaymentContextValue>(
     () => ({

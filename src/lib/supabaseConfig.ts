@@ -1,0 +1,41 @@
+/**
+ * Supabase connection settings.
+ *
+ * Paste the **anon / publishable** key below (Supabase dashboard → Project
+ * Settings → API → `anon public`). The anon key is meant to ship in the client
+ * bundle — every table is protected by RLS and every write goes through an RPC.
+ * The service-role key must never appear in this file.
+ *
+ * Until a key is present the app keeps running on its bundled mock data, so the
+ * prototype is never broken while the backend is being wired up.
+ */
+
+export const SUPABASE_PROJECT_ID = 'iwwjbeiivtfxyujxmzma';
+
+export const SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
+
+/** ⬇️ PASTE THE ANON KEY HERE (starts with `eyJ…` or `sb_publishable_…`). */
+export const SUPABASE_ANON_KEY = '';
+
+/** True once the key is in place — every context switches from mock to live. */
+export const isLive = SUPABASE_ANON_KEY.trim().length > 20;
+
+/**
+ * Dev bypass for sign-in while no SMS provider is attached to Supabase Auth.
+ * The phone number is mapped to a synthetic email account, so the session, the
+ * `profiles` row and every RLS policy behave exactly like production.
+ * Requires Auth → Providers → Email with "Confirm email" turned OFF.
+ * Set this to false the moment SMS is live.
+ */
+export const DEV_OTP_BYPASS: boolean = true;
+
+/** The code the dev bypass accepts. Ignored when `DEV_OTP_BYPASS` is false. */
+export const DEV_OTP_CODE = '1234';
+
+/** Synthetic credentials used only by the dev bypass. */
+export function devCredentials(nationalDigits: string) {
+  return {
+    email: `eg${nationalDigits}@dokhan.dev`,
+    password: `dokhan-dev-${nationalDigits}`
+  };
+}

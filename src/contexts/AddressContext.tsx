@@ -1,5 +1,10 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { addresses as seeded } from '../data/addresses';
+import { addressFromRow, addressToRow } from '../lib/mappers';
+import type { AddressRow } from '../lib/rows';
+import { supabase } from '../lib/supabase';
+import { isLive } from '../lib/supabaseConfig';
+import { useAuth } from './AuthContext';
 import type { DeliveryAddress } from '../types';
 
 interface AddressContextValue {
@@ -11,19 +16,51 @@ interface AddressContextValue {
 
 const AddressContext = createContext<AddressContextValue | null>(null);
 
-export function AddressProvider({ children }: {children: React.ReactNode;}) {
-  const [addresses, setAddresses] = useState<DeliveryAddress[]>(seeded);
+const ADDRESS_SELECT =
+'id,label_en,label_ar,line_en,line_ar,x,y,eta_minutes,kind,building,floor,apartment,landmark,note,is_default';
 
-  const saveAddress = useCallback((address: DeliveryAddress) => {
-    setAddresses((prev) => {
-      const exists = prev.some((entry) => entry.id === address.id);
-      if (exists) return prev.map((entry) => entry.id === address.id ? address : entry);
-      return [address, ...prev];
-    });
-  }, []);
+export function AddressProvider({ children }: {children: React.ReactNode;}) {
+  const { user } = useAuth();
+  const [addresses, setAddresses] = useState<DeliveryAddress[]>(isLive ? [] : seeded);
+
+  useEffect(() => {
+    if (!isLive) return;
+    if (!user) {
+      setAddresses([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.
+      from('addresses').
+      select(ADDRESS_SELECT).
+      order('is_default', { ascending: false }).
+      order('created_at', { ascending: false });
+      if (cancelled || !data) return;
+      setAddresses((data as unknown as AddressRow[]).map(addressFromRow));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const saveAddress = useCallback(
+    (address: DeliveryAddress) => {
+      setAddresses((prev) => {
+        const exists = prev.some((entry) => entry.id === address.id);
+        if (exists) return prev.map((entry) => entry.id === address.id ? address : entry);
+        return [address, ...prev];
+      });
+      if (isLive && user) {
+        void supabase.from('addresses').upsert(addressToRow(address, user.id));
+      }
+    },
+    [user]
+  );
 
   const removeAddress = useCallback((id: string) => {
     setAddresses((prev) => prev.filter((entry) => entry.id !== id));
+    if (isLive) void supabase.from('addresses').delete().eq('id', id);
   }, []);
 
   const value = useMemo<AddressContextValue>(

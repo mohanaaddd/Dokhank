@@ -78,6 +78,8 @@ export const ORDER_FLOW: OrderStatus[] = ['confirmed', 'packing', 'on_the_way', 
 
 export interface Order {
   id: string;
+  /** Human order code from the backend, e.g. `#EG2481`. */
+  code?: string;
   lines: CartLine[];
   subtotal: number;
   deliveryFee: number;
@@ -88,6 +90,8 @@ export interface Order {
   etaMinutes: number;
   courier: {name: string;vehicle: string;initials: string;};
   paymentMethodId: string;
+  /** Loyalty points credited when the order was delivered. */
+  pointsEarned?: number;
 }
 
 export interface UserProfile {

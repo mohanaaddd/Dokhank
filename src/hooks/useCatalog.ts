@@ -1,39 +1,42 @@
-import { useEffect, useMemo, useState } from 'react';
-import { products as catalog } from '../data/products';
-import type { AsyncStatus, CategoryId, Product } from '../types';
+import { useEffect, useSyncExternalStore } from 'react';
+import {
+  ensureProduct,
+  getSnapshot,
+  loadCatalog,
+  productById,
+  subscribe } from
+'../lib/catalogStore';
+import type { CategoryId, Product } from '../types';
 
 /**
- * Stands in for a Supabase `products` query. Components already handle
- * loading and error states, so swapping the source later changes nothing else.
+ * Reads the `products` + `product_specs` tables through the shared catalog
+ * cache. Components already handle loading and error states, so the swap from
+ * mock data changed nothing above this line.
  */
 export function useCatalog() {
-  const [status, setStatus] = useState<AsyncStatus>('loading');
-  const [items, setItems] = useState<Product[]>([]);
-  const [attempt, setAttempt] = useState(0);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   useEffect(() => {
-    let cancelled = false;
-    setStatus('loading');
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setItems(catalog);
-      setStatus('success');
-    }, 520);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [attempt]);
+    void loadCatalog();
+  }, []);
 
   return {
-    items,
-    status,
-    retry: () => setAttempt((value) => value + 1)
+    items: snapshot.items,
+    status: snapshot.status,
+    retry: () => {
+      void loadCatalog(true);
+    }
   };
 }
 
 export function useProduct(productId: string): Product | undefined {
-  return useMemo(() => catalog.find((product) => product.id === productId), [productId]);
+  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  useEffect(() => {
+    void ensureProduct(productId);
+  }, [productId]);
+
+  return productById(productId);
 }
 
 export function filterProducts(

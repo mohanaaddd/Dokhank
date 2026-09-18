@@ -1,5 +1,18 @@
 # DOKHAN — Backend Handbook (for Claude)
 
+> **Status: built.** The Supabase layer described below now exists in `supabase/` (4 migrations +
+> `seed.sql` + an optional cron file) and the data layer in `lib/`. Every context provider and
+> `hooks/useCatalog.ts` now read the real backend, with identical exports. No frontend file was
+> touched.
+>
+> - **To go live:** follow `supabase/RUNBOOK.md` — apply the SQL in order, set the Auth options,
+>   then paste the anon key into `lib/supabaseConfig.ts`. Before the key is set, the app runs on the
+>   bundled mock data exactly as it did before, so nothing is ever half-broken.
+> - **Courier app:** `courier.md` is the self-contained brief for the separate rider project on the
+>   same database.
+> - **Deliberate deviations** from the tree below (text address ids, bounding-box zones, courier
+>   snapshots) are listed in §7 of the runbook.
+
 Dokhan is an 18+ tobacco / vape / IQOS delivery app for Egypt (Cairo first). The **entire frontend
 already exists** in this repo as a React + TypeScript + Tailwind prototype with mocked data held in
 React contexts.
