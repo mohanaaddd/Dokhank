@@ -143,17 +143,20 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
         const metadata = { phone: fullEgyptianPhone(phone) };
         let signIn = await supabase.auth.signInWithPassword(credentials);
         if (signIn.error) {
+          console.error('[DEV_BYPASS] signIn error:', signIn.error.message);
           const signUp = await supabase.auth.signUp({
             ...credentials,
             options: { data: metadata }
           });
           if (signUp.error) {
+            console.error('[DEV_BYPASS] signUp error:', signUp.error.message, signUp.error);
             setStatus('error');
             setError(errorCode(signUp.error));
             return false;
           }
           signIn = await supabase.auth.signInWithPassword(credentials);
           if (signIn.error) {
+            console.error('[DEV_BYPASS] signIn after signUp error:', signIn.error.message);
             setStatus('error');
             setError(errorCode(signIn.error));
             return false;
