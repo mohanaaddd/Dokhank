@@ -19,23 +19,3 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 /** True once the key is in place — every context switches from mock to live. */
 export const isLive = SUPABASE_ANON_KEY.trim().length > 20;
-
-/**
- * Dev bypass for sign-in while no SMS provider is attached to Supabase Auth.
- * The phone number is mapped to a synthetic email account, so the session, the
- * `profiles` row and every RLS policy behave exactly like production.
- * Requires Auth → Providers → Email with "Confirm email" turned OFF.
- * Set this to false the moment SMS is live.
- */
-export const DEV_OTP_BYPASS: boolean = true;
-
-/** The code the dev bypass accepts. Ignored when `DEV_OTP_BYPASS` is false. */
-export const DEV_OTP_CODE = '1234';
-
-/** Synthetic credentials used only by the dev bypass. */
-export function devCredentials(nationalDigits: string) {
-  return {
-    email: `eg${nationalDigits}@dokhan.dev`,
-    password: `dokhan-dev-${nationalDigits}`
-  };
-}

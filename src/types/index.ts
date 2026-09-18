@@ -1,5 +1,7 @@
 export type Locale = 'en' | 'ar';
 
+export type AccentName = 'lime' | 'cyan' | 'magenta' | 'amber';
+
 /** Mirrors a Supabase row with `*_en` / `*_ar` localized columns. */
 export type Localized = Record<Locale, string>;
 

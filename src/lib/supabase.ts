@@ -20,8 +20,17 @@ export const supabase: SupabaseClient = createClient(
 
 /** Narrow a PostgrestError / AuthError down to a translation key the UI knows. */
 export function errorCode(error: unknown): string {
-  const message = (error as {message?: string;} | null)?.message ?? '';
-  if (/otp|token|code/i.test(message)) return 'invalidCode';
+  const message = [
+    (error as {message?: string;} | null)?.message ?? '',
+    (error as {code?: string;} | null)?.code ?? '',
+    typeof error === 'string' ? error : ''
+  ].join(' ');
+  if (/RATE_LIMITED|P0001|too many/i.test(message)) return 'otpWait';
+  if (/NAME_REQUIRED/i.test(message)) return 'nameRequired';
+  if (/otpExpired/i.test(message)) return 'otpExpired';
+  if (/otpLocked/i.test(message)) return 'otpLocked';
+  if (/INVALID_PHONE/i.test(message)) return 'invalidPhone';
+  if (/otp|token|invalidCode/i.test(message)) return 'invalidCode';
   if (/phone|number/i.test(message)) return 'invalidPhone';
   return 'requestFailed';
 }
