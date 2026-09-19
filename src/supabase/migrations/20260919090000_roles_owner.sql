@@ -508,7 +508,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   v_courier public.couriers;
 begin
@@ -532,7 +532,7 @@ begin
   values (auth.uid(), 'assign_courier', 'orders', p_order_id::text,
           jsonb_build_object('courier_id', v_courier.id));
 end;
-$;
+$$;
 
 -- Widened: the owner can now override a stuck order from the console.
 create or replace function public.fn_advance_order_status(p_order_id uuid, p_status public.order_status)
