@@ -1,9 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_PAYMENT_ID, paymentMethods as seeded } from '../data/payments';
 import { paymentFromRow } from '../lib/mappers';
 import type { PaymentMethodRow } from '../lib/rows';
 import { supabase } from '../lib/supabase';
-import { isLive } from '../lib/supabaseConfig';
 import { useAuth } from './AuthContext';
 import type { PaymentMethod } from '../types';
 
@@ -26,8 +24,8 @@ const DEMO_CARD = { brand: 'Mastercard', expiry: '11/29' };
 
 export function PaymentProvider({ children }: {children: React.ReactNode;}) {
   const { user } = useAuth();
-  const [methods, setMethods] = useState<PaymentMethod[]>(seeded);
-  const [defaultId, setDefaultId] = useState<string>(DEFAULT_PAYMENT_ID);
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [defaultId, setDefaultId] = useState<string>('');
 
   const hydrate = useCallback(async () => {
     const { data } = await supabase.from('payment_methods').select(METHOD_SELECT).order('created_at');
@@ -39,16 +37,18 @@ export function PaymentProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   useEffect(() => {
-    if (!isLive || !user) return;
+    if (!user) {
+      setMethods([]);
+      setDefaultId('');
+      return;
+    }
     void hydrate();
-  }, [isLive, user, hydrate]);
+  }, [user, hydrate]);
 
   const setDefaultMethod = useCallback((id: string) => {
     setDefaultId(id);
-    if (isLive && user) {
-      void supabase.rpc('fn_set_default_payment_method', { p_method_id: id });
-    }
-  }, [user]);
+    void supabase.rpc('fn_set_default_payment_method', { p_method_id: id });
+  }, []);
 
   const removeMethod = useCallback(
     (id: string) => {
@@ -59,31 +59,14 @@ export function PaymentProvider({ children }: {children: React.ReactNode;}) {
         setDefaultId((current) => current === id ? next[0]?.id ?? current : current);
         return next;
       });
-      if (isLive && user) {
-        void supabase.rpc('fn_delete_payment_method', { p_method_id: id }).then(() => hydrate());
-      }
+      void supabase.rpc('fn_delete_payment_method', { p_method_id: id }).then(() => hydrate());
     },
-    [user, hydrate]
+    [hydrate]
   );
 
   const addCard = useCallback(() => {
+    if (!user) return;
     const last4 = String(Math.floor(1000 + Math.random() * 9000));
-
-    if (!isLive || !user) {
-      setMethods((prev) => [
-      ...prev,
-      {
-        id: `pay_${Date.now().toString(36)}`,
-        kind: 'card',
-        brand: DEMO_CARD.brand,
-        last4,
-        expiry: DEMO_CARD.expiry,
-        removable: true
-      }]
-      );
-      return;
-    }
-
     void supabase.
     from('payment_methods').
     insert({

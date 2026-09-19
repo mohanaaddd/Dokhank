@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
-import { DEFAULT_PAYMENT_ID, PAYMENT_ICONS } from '../../data/payments';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePayments } from '../../contexts/PaymentContext';
-import { paymentNote, paymentTitle } from '../../utils/payment';
+import { PAYMENT_ICONS, paymentNote, paymentTitle } from '../../utils/payment';
 
 /**
  * Mounted only while the payment accordion is open, so the default method is
@@ -107,7 +106,9 @@ export function PaymentMethodsPanel() {
                     removeMethod(method.id);
                     setConfirmId(null);
                     setSelected((current) =>
-                    current === method.id ? DEFAULT_PAYMENT_ID : current
+                    current === method.id ?
+                    methods.find((entry) => entry.kind === 'cash')?.id ?? current :
+                    current
                     );
                   }}
                   className="rounded-xl bg-neon-magenta px-2.5 py-1.5 text-xs font-extrabold text-ink-950">

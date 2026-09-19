@@ -1,9 +1,7 @@
-import { products as staticCatalog } from '../data/products';
 import { productFromRow } from './mappers';
-import type { ProductRow } from './rows';
+import type { CategoryRow, ProductRow } from './rows';
 import { supabase } from './supabase';
-import { isLive } from './supabaseConfig';
-import type { AsyncStatus, Product } from '../types';
+import type { AsyncStatus, Category, Product } from '../types';
 
 /**
  * Module-level catalog cache. The catalog is public, immutable-ish data that
@@ -13,13 +11,14 @@ import type { AsyncStatus, Product } from '../types';
 
 interface Snapshot {
   items: Product[];
+  categories: Category[];
   status: AsyncStatus;
 }
 
-const PRODUCT_SELECT =
-'id,name_en,name_ar,tagline_en,tagline_ar,description_en,description_ar,price,compare_at_price,image_url,category_id,rating,review_count,stock,badge,product_specs(label_en,label_ar,value_en,value_ar,sort_order)';
+export const PRODUCT_SELECT =
+'id,name_en,name_ar,tagline_en,tagline_ar,description_en,description_ar,price,compare_at_price,image_url,category_id,rating,review_count,stock,badge,is_active,product_specs(label_en,label_ar,value_en,value_ar,sort_order)';
 
-let snapshot: Snapshot = { items: [], status: 'idle' };
+let snapshot: Snapshot = { items: [], categories: [], status: 'idle' };
 let index = new Map<string, Product>();
 let inFlight: Promise<void> | null = null;
 
@@ -47,31 +46,29 @@ export function productById(id: string): Product | undefined {
 }
 
 async function fetchCatalog(): Promise<void> {
-  publish({ items: snapshot.items, status: 'loading' });
+  publish({ ...snapshot, status: 'loading' });
 
-  if (!isLive) {
-    await new Promise((resolve) => setTimeout(resolve, 520));
-    publish({ items: staticCatalog, status: 'success' });
+  const [productRes, categoryRes] = await Promise.all([
+  supabase.from('products').select(PRODUCT_SELECT).eq('is_active', true),
+  supabase.from('categories').select('id,label_en,label_ar,icon,sort_order').order('sort_order')]
+  );
+
+  if (productRes.error || !productRes.data) {
+    publish({ ...snapshot, status: 'error' });
     return;
   }
 
-  const { data, error } = await supabase.
-  from('products').
-  select(PRODUCT_SELECT).
-  eq('is_active', true);
+  const items = (productRes.data as unknown as ProductRow[]).map(productFromRow);
 
-  if (error || !data) {
-    publish({ items: snapshot.items, status: 'error' });
-    return;
-  }
-
-  const items = (data as unknown as ProductRow[]).map(productFromRow);
+  const categories = ((categoryRes.data ?? []) as unknown as CategoryRow[]).map((row) => ({
+    id: row.id,
+    label: { en: row.label_en, ar: row.label_ar || row.label_en },
+    icon: row.icon
+  }));
 
   // Trending order drives the home rails; fall back to rating when the
   // materialized view has not been refreshed yet.
-  const { data: trending } = await supabase.
-  from('v_trending_products').
-  select('id,sold_30d');
+  const { data: trending } = await supabase.from('v_trending_products').select('id,sold_30d');
 
   const rank = new Map<string, number>(
     ((trending ?? []) as Array<{id: string;sold_30d: number;}>).map((row) => [
@@ -85,7 +82,7 @@ async function fetchCatalog(): Promise<void> {
     return delta !== 0 ? delta : b.rating - a.rating;
   });
 
-  publish({ items, status: 'success' });
+  publish({ items, categories, status: 'success' });
 }
 
 /** Loads the catalog once. `force` re-runs it (the retry button). */
@@ -100,10 +97,6 @@ export function loadCatalog(force = false): Promise<void> {
 /** Deep-link safety net: pull a single product that is not in the cache yet. */
 export async function ensureProduct(id: string): Promise<void> {
   if (index.has(id)) return;
-  if (!isLive) {
-    await loadCatalog();
-    return;
-  }
   const { data, error } = await supabase.
   from('products').
   select(PRODUCT_SELECT).
@@ -111,5 +104,5 @@ export async function ensureProduct(id: string): Promise<void> {
   maybeSingle();
   if (error || !data) return;
   const product = productFromRow(data as unknown as ProductRow);
-  publish({ items: [...snapshot.items, product], status: snapshot.status });
+  publish({ ...snapshot, items: [...snapshot.items, product] });
 }

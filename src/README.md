@@ -634,3 +634,47 @@ by card once card payment ships, images served from Supabase Storage + CDN.
   at upload, and `courier_locations` partitioning (it is the fastest-growing table).
 - At ~100k MAU the DB, not the frontend, is the constraint: partition `orders` by month, move
   `courier_locations` to a time-series store, and negotiate SMS + payment rates directly.
+
+---
+
+## Addendum — roles, ops shells and live auth
+
+Written after the handbook above was built. Where the two disagree, this section wins.
+
+### Roles
+
+One bundle, three shells. `profiles.role` is an `app_role` enum (`customer` | `courier` | `owner`),
+added by `supabase/migrations/20260919090000_roles_owner.sql`. It is server-owned: no grant or
+policy lets a client write it, and `fn_set_role(phone, role)` is service-role only. The navigation
+machine builds a different screen graph per role, so a customer cannot reach an ops screen even by
+forcing a state.
+
+| Role | Shell | Accent |
+| --- | --- | --- |
+| `customer` | shop → cart → checkout → tracking | member's chosen accent |
+| `courier` | dispatch queue → active delivery → profile | cyan |
+| `owner` | order board → order detail → catalog → couriers → insights | magenta |
+
+The same migration adds `fn_is_owner()`, widens `fn_is_courier()`, `fn_advance_order_status` and
+`fn_assign_courier`, and introduces `fn_owner_update_product`, `fn_owner_patch_product`,
+`fn_owner_cancel_order` (which returns stock), `fn_owner_upsert_courier`, `fn_owner_set_setting`,
+`fn_courier_claim_order`, and the `v_owner_*` analytics views.
+
+### Auth
+
+Sign-in is real Supabase phone OTP — `signInWithOtp({ channel: 'sms', shouldCreateUser: true })`
+then `verifyOtp`. The offline bypass still exists behind `DEV_OTP_BYPASS` in
+`lib/supabaseConfig.ts` but ships **off**; `OTP_LENGTH` (6) and `OTP_RESEND_SECONDS` (60) drive the
+code boxes and the resend cooldown. An SMS provider is now a hard requirement to log in — see
+`supabase/RUNBOOK.md` §3.
+
+### Mock data
+
+Gone. Order lines read their `order_items` snapshots, categories and payment methods come from the
+database, and there is no `isLive` branch left in any provider. `data/products.ts` remains only as
+the shape reference for the seed.
+
+### Resetting
+
+`supabase/RESET.sql` drops the schema, the signup trigger, this project's storage policies and any
+cron jobs so migrations 1–7 can be re-applied from scratch. Destructive; see RUNBOOK §1a.

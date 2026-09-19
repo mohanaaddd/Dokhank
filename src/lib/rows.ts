@@ -1,4 +1,11 @@
-import type { AddressLabel, CategoryId, OrderStatus, PaymentKind, ProductBadge } from '../types';
+import type {
+  AddressLabel,
+  AppRole,
+  CategoryId,
+  OrderStatus,
+  PaymentKind,
+  ProductBadge } from
+'../types';
 
 /**
  * Shapes returned by the Supabase REST layer. `numeric` columns arrive as
@@ -19,6 +26,7 @@ export interface ProfileRow {
   age_verified: boolean;
   id_last_four: string | null;
   is_blocked: boolean;
+  role: AppRole | null;
 }
 
 export interface CategoryRow {
@@ -53,6 +61,7 @@ export interface ProductRow {
   review_count: number;
   stock: number;
   badge: ProductBadge | null;
+  is_active?: boolean;
   product_specs?: ProductSpecRow[] | null;
 }
 
@@ -89,6 +98,10 @@ export interface OrderItemRow {
   product_id: string;
   quantity: number;
   unit_price?: Num;
+  /** Snapshotted at purchase time — never re-read from `products`. */
+  name_en?: string;
+  name_ar?: string;
+  products?: {image_url: string;} | null;
 }
 
 export interface OrderRow {
@@ -102,12 +115,42 @@ export interface OrderRow {
   courier_snapshot: {name: string;vehicle: string;initials: string;} | null;
   payment_method_id: string | null;
   payment_kind: PaymentKind;
-  status: OrderStatus | 'cancelled';
+  status: OrderStatus;
   eta_minutes: number;
   points_earned: number;
   placed_at: string;
   delivered_at: string | null;
+  cancel_reason?: string | null;
   order_items?: OrderItemRow[] | null;
+}
+
+/** The order board query: same row plus who is on either end of it. */
+export interface OpsOrderRow extends OrderRow {
+  user_id: string;
+  courier_id: string | null;
+  profiles?: {name: string;phone: string;} | null;
+}
+
+export interface CourierRow {
+  id: string;
+  user_id: string | null;
+  name: string;
+  initials: string;
+  phone: string;
+  vehicle: string;
+  status: 'offline' | 'idle' | 'assigned' | 'delivering';
+  zone_id: string | null;
+  rating: Num;
+}
+
+export interface ZoneRow {
+  id: string;
+  name_en: string;
+  name_ar: string;
+  delivery_fee: Num;
+  opens_at: string;
+  closes_at: string;
+  is_active: boolean;
 }
 
 export interface FavoriteRow {
@@ -118,4 +161,29 @@ export interface UserStatsRow {
   points: number;
   delivered_orders_count: number;
   orders_count: number;
+}
+
+export interface RevenueDayRow {
+  day: string;
+  orders_count: number;
+  delivered_count: number;
+  revenue: Num;
+}
+
+export interface TopProductRow {
+  product_id: string;
+  name_en: string;
+  name_ar: string;
+  units: number;
+  revenue: Num;
+}
+
+export interface OwnerTodayRow {
+  revenue_today: Num;
+  revenue_yesterday: Num;
+  revenue_7d: Num;
+  revenue_prev_7d: Num;
+  revenue_30d: Num;
+  orders_today: number;
+  orders_30d: number;
 }

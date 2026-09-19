@@ -2,11 +2,13 @@ import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from './components/layout/AppShell';
 import { AddressProvider } from './contexts/AddressContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
+import { CourierProvider } from './contexts/CourierContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { LocaleProvider, type AccentName } from './contexts/LocaleContext';
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext';
+import { OpsProvider } from './contexts/OpsContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { PaymentProvider } from './contexts/PaymentContext';
 import { Address } from './pages/Address';
@@ -22,6 +24,16 @@ import { Profile } from './pages/Profile';
 import { Search } from './pages/Search';
 import { Tracking } from './pages/Tracking';
 import { Welcome } from './pages/Welcome';
+import { ActiveDelivery } from './pages/courier/ActiveDelivery';
+import { CourierProfile } from './pages/courier/CourierProfile';
+import { Queue } from './pages/courier/Queue';
+import { Catalog } from './pages/owner/Catalog';
+import { Couriers } from './pages/owner/Couriers';
+import { Insights } from './pages/owner/Insights';
+import { OrderBoard } from './pages/owner/OrderBoard';
+import { OrderDetail } from './pages/owner/OrderDetail';
+import { OwnerProfile } from './pages/owner/OwnerProfile';
+import { ProductEditor } from './pages/owner/ProductEditor';
 import { screenKey } from './utils/navigationMachine';
 import type { Locale } from './types';
 
@@ -56,6 +68,26 @@ function ScreenRouter() {
         return <Orders />;
       case 'profile':
         return <Profile />;
+      case 'courier_queue':
+        return <Queue />;
+      case 'courier_active':
+        return <ActiveDelivery />;
+      case 'courier_profile':
+        return <CourierProfile />;
+      case 'owner_orders':
+        return <OrderBoard />;
+      case 'owner_order':
+        return <OrderDetail orderId={screen.orderId} />;
+      case 'owner_catalog':
+        return <Catalog />;
+      case 'owner_product':
+        return <ProductEditor productId={screen.productId} />;
+      case 'owner_insights':
+        return <Insights />;
+      case 'owner_profile':
+        return <OwnerProfile />;
+      case 'owner_couriers':
+        return <Couriers />;
       default:
         return null;
     }
@@ -77,6 +109,45 @@ function ScreenRouter() {
 
 }
 
+/**
+ * Cart, addresses, payment methods and favourites are customer concepts. An
+ * owner or courier session never mounts them, so they never fire a query.
+ */
+function CustomerStack({ children }: {children: React.ReactNode;}) {
+  return (
+    <AddressProvider>
+      <PaymentProvider>
+        <FavoritesProvider>
+          <CartProvider>
+            <OrderProvider>{children}</OrderProvider>
+          </CartProvider>
+        </FavoritesProvider>
+      </PaymentProvider>
+    </AddressProvider>);
+
+}
+
+function RoleRouter({ startAtOnboarding }: {startAtOnboarding: boolean;}) {
+  const { user } = useAuth();
+  const role = user?.role ?? 'customer';
+
+  const navigation =
+  <NavigationProvider
+    key={user ? `${role}:${user.id}` : `anon:${startAtOnboarding}`}
+    role={role}
+    initialScreen={user ? undefined : startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
+    
+      <AppShell>
+        <ScreenRouter />
+      </AppShell>
+    </NavigationProvider>;
+
+
+  if (role === 'owner') return <OpsProvider>{navigation}</OpsProvider>;
+  if (role === 'courier') return <CourierProvider>{navigation}</CourierProvider>;
+  return <CustomerStack>{navigation}</CustomerStack>;
+}
+
 interface AppProps {
   /** Interface language — Egyptian Arabic is the default and flips the layout to RTL. */
   language?: Locale;
@@ -90,24 +161,7 @@ export function App({ language = 'ar', accent = 'lime', startAtOnboarding = true
   return (
     <LocaleProvider initialLocale={language} initialAccent={accent}>
       <AuthProvider>
-        <AddressProvider>
-          <PaymentProvider>
-            <FavoritesProvider>
-              <CartProvider>
-                <OrderProvider>
-                  <NavigationProvider
-                    key={startAtOnboarding ? 'welcome' : 'home'}
-                    initialScreen={startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
-                    
-                    <AppShell>
-                      <ScreenRouter />
-                    </AppShell>
-                  </NavigationProvider>
-                </OrderProvider>
-              </CartProvider>
-            </FavoritesProvider>
-          </PaymentProvider>
-        </AddressProvider>
+        <RoleRouter startAtOnboarding={startAtOnboarding} />
       </AuthProvider>
     </LocaleProvider>);
 

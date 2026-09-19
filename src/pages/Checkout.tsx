@@ -4,7 +4,7 @@ import { InfoIcon, MapPinIcon } from 'lucide-react';
 import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { OrderSummary } from '../components/cart/OrderSummary';
 import { ScreenHeader } from '../components/layout/ScreenHeader';
-import { PAYMENT_ICONS } from '../data/payments';
+
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useLocale } from '../contexts/LocaleContext';
@@ -12,7 +12,7 @@ import { useNavigation } from '../contexts/NavigationContext';
 import { useOrders } from '../contexts/OrderContext';
 import { usePayments } from '../contexts/PaymentContext';
 import { formatPrice, localize } from '../utils/format';
-import { paymentNote, paymentTitle } from '../utils/payment';
+import { PAYMENT_ICONS, paymentNote, paymentTitle } from '../utils/payment';
 
 export function Checkout() {
   const { t } = useTranslation();

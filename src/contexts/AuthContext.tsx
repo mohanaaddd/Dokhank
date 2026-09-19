@@ -1,9 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { profileToUser } from '../lib/mappers';
-import { isValidPersonName } from '../lib/prefs';
 import type { ProfileRow } from '../lib/rows';
 import { errorCode, supabase } from '../lib/supabase';
-import { isLive } from '../lib/supabaseConfig';
+import { devCredentials, DEV_OTP_BYPASS, DEV_OTP_CODE } from '../lib/supabaseConfig';
 import { digitsOnly, fullEgyptianPhone, isValidEgyptianPhone } from '../utils/format';
 import type { AsyncStatus, UserProfile } from '../types';
 
@@ -11,12 +10,10 @@ interface AuthContextValue {
   user: UserProfile | null;
   status: AsyncStatus;
   error: string | null;
-  /** True when this Egyptian number already has a profile. */
-  lookupPhone: (phone: string) => Promise<boolean>;
-  /** Issues a hashed OTP challenge. `name` is required for first-time numbers. */
-  requestCode: (phone: string, name?: string) => Promise<void>;
-  /** Verifies the OTP via the `otp` Edge Function, then loads `profiles`. */
-  verifyCode: (phone: string, code: string) => Promise<UserProfile | null>;
+  /** Supabase `auth.signInWithOtp`. Takes the 10 national digits. */
+  requestCode: (phone: string) => Promise<void>;
+  /** Supabase `auth.verifyOtp`, then loads the `profiles` row. */
+  verifyCode: (phone: string, code: string) => Promise<boolean>;
   /** Hashes + age-checks the national ID through `fn_submit_identity`. */
   submitIdentity: (nationalId: string) => Promise<void>;
   signOut: () => void;
@@ -27,8 +24,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Egyptian mobiles are stored in E.164 for Auth, and pretty-printed on profiles. */
+const e164 = (phone: string) => `+20${digitsOnly(phone)}`;
+
 const PROFILE_SELECT =
-'id,phone,name,initials,points,locale,accent,age_verified,id_last_four,is_blocked';
+'id,phone,name,initials,points,locale,accent,age_verified,id_last_four,is_blocked,role';
 
 export function AuthProvider({ children }: {children: React.ReactNode;}) {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -47,6 +47,8 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) return null;
 
+    // The signup trigger creates the row; this RPC is the idempotent safety net
+    // for accounts that existed before the migration ran.
     await supabase.rpc('fn_ensure_profile');
 
     const { data, error: profileError } = await supabase.
@@ -56,19 +58,13 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     maybeSingle();
 
     if (profileError || !data) return null;
-    const row = data as unknown as ProfileRow;
-    if (row.is_blocked) {
-      await supabase.auth.signOut();
-      if (mounted.current) setUser(null);
-      return null;
-    }
-    const next = profileToUser(row);
+    const next = profileToUser(data as unknown as ProfileRow);
     if (mounted.current) setUser(next);
     return next;
   }, []);
 
+  /** Restore an existing session on boot and follow Supabase auth events. */
   useEffect(() => {
-    if (!isLive) return;
     void loadProfile();
     const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
@@ -82,22 +78,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     return () => subscription.subscription.unsubscribe();
   }, [loadProfile]);
 
-  const lookupPhone = useCallback(async (phone: string) => {
-    if (!isValidEgyptianPhone(phone)) {
-      throw new Error('invalidPhone');
-    }
-    if (!isLive) {
-      await wait(280);
-      return digitsOnly(phone) === '1018013090';
-    }
-    const { data, error: lookupError } = await supabase.rpc('fn_phone_registered', {
-      p_phone: phone
-    });
-    if (lookupError) throw lookupError;
-    return Boolean((data as {exists?: boolean;} | null)?.exists);
-  }, []);
-
-  const requestCode = useCallback(async (phone: string, name?: string) => {
+  const requestCode = useCallback(async (phone: string) => {
     setStatus('loading');
     setError(null);
 
@@ -107,20 +88,18 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
       throw new Error('invalidPhone');
     }
 
-    const trimmed = name?.trim();
-    if (trimmed && !isValidPersonName(trimmed.split(/\s+/)[0] ?? '')) {
-      /* full name is validated by the form; server still checks length */
-    }
-
-    if (!isLive) {
-      await wait(500);
+    if (DEV_OTP_BYPASS) {
+      await wait(250);
       setStatus('success');
       return;
     }
 
-    const { error: otpError } = await supabase.rpc('fn_request_phone_otp', {
-      p_phone: phone,
-      p_name: trimmed || null
+    // `shouldCreateUser` is what makes the first OTP double as sign-up; the
+    // `on_auth_user_created` trigger then mints the `profiles` row from
+    // `auth.users.phone`.
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      phone: e164(phone),
+      options: { channel: 'sms', shouldCreateUser: true }
     });
 
     if (otpError) {
@@ -135,64 +114,55 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     async (phone: string, code: string) => {
       setStatus('loading');
       setError(null);
+      const digits = digitsOnly(phone);
 
-      if (!isLive) {
-        await wait(700);
-        if (digitsOnly(code) !== '4938') {
+      if (DEV_OTP_BYPASS) {
+        if (code !== DEV_OTP_CODE) {
           setStatus('error');
           setError('invalidCode');
-          return null;
+          return false;
         }
-        const next: UserProfile = {
-          id: 'user_01',
-          name: 'Youssef',
-          phone: fullEgyptianPhone(phone),
-          initials: 'YS',
-          points: 1240,
-          ageVerified: false
-        };
-        setUser(next);
-        setStatus('success');
-        return next;
-      }
-
-      const { data, error: fnError } = await supabase.functions.invoke('otp', {
-        body: { phone, code: digitsOnly(code) }
-      });
-
-      if (fnError) {
-        setStatus('error');
-        const payload = (fnError as {context?: {json?: () => Promise<{error?: string;}>;};}) ?? {};
-        void payload;
-        setError(errorCode(fnError));
-        return null;
-      }
-
-      const body = data as {access_token?: string;refresh_token?: string;error?: string;} | null;
-      if (!body?.access_token || !body.refresh_token) {
-        setStatus('error');
-        setError(body?.error ?? 'invalidCode');
-        return null;
-      }
-
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: body.access_token,
-        refresh_token: body.refresh_token
-      });
-      if (sessionError) {
-        setStatus('error');
-        setError('requestFailed');
-        return null;
+        const credentials = devCredentials(digits);
+        const metadata = { phone: fullEgyptianPhone(phone) };
+        let signIn = await supabase.auth.signInWithPassword(credentials);
+        if (signIn.error) {
+          const signUp = await supabase.auth.signUp({
+            ...credentials,
+            options: { data: metadata }
+          });
+          if (signUp.error) {
+            setStatus('error');
+            setError(errorCode(signUp.error));
+            return false;
+          }
+          signIn = await supabase.auth.signInWithPassword(credentials);
+          if (signIn.error) {
+            setStatus('error');
+            setError(errorCode(signIn.error));
+            return false;
+          }
+        }
+      } else {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          phone: e164(phone),
+          token: code,
+          type: 'sms'
+        });
+        if (verifyError) {
+          setStatus('error');
+          setError(errorCode(verifyError));
+          return false;
+        }
       }
 
       const profile = await loadProfile();
       if (!profile) {
         setStatus('error');
         setError('requestFailed');
-        return null;
+        return false;
       }
       setStatus('success');
-      return profile;
+      return true;
     },
     [loadProfile]
   );
@@ -201,20 +171,14 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     setStatus('loading');
     setError(null);
 
-    if (!isLive) {
-      await wait(2600);
-      setUser((prev) =>
-      prev ? { ...prev, ageVerified: true, idLastFour: nationalId.slice(-4) } : prev
-      );
-      setStatus('success');
-      return;
-    }
-
     const { data, error: rpcError } = await supabase.rpc('fn_submit_identity', {
       p_national_id: nationalId
     });
 
     if (rpcError) {
+      // Never reject: the onboarding screen advances on resolve and the order
+      // RPC is the real gate, so a failed check simply leaves the account
+      // unverified with the reason surfaced in `error`.
       setStatus('error');
       setError(errorCode(rpcError));
       return;
@@ -236,17 +200,21 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     setUser(null);
     setStatus('idle');
     setError(null);
-    if (isLive) void supabase.auth.signOut();
+    void supabase.auth.signOut();
   }, []);
 
+  /**
+   * Optimistic locally, authoritative on the server: `fn_add_review_points`
+   * clamps the amount and caps how much a member can earn this way.
+   */
   const addPoints = useCallback((amount: number) => {
     setUser((prev) => prev ? { ...prev, points: prev.points + amount } : prev);
-    if (isLive) void supabase.rpc('fn_add_review_points', { p_amount: amount });
+    void supabase.rpc('fn_add_review_points', { p_amount: amount });
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, error, lookupPhone, requestCode, verifyCode, submitIdentity, signOut, addPoints }),
-    [user, status, error, lookupPhone, requestCode, verifyCode, submitIdentity, signOut, addPoints]
+    () => ({ user, status, error, requestCode, verifyCode, submitIdentity, signOut, addPoints }),
+    [user, status, error, requestCode, verifyCode, submitIdentity, signOut, addPoints]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

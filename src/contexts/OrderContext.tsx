@@ -1,59 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { addresses } from '../data/addresses';
 import { addressToRow, orderFromRow } from '../lib/mappers';
 import type { OrderRow, UserStatsRow } from '../lib/rows';
 import { supabase } from '../lib/supabase';
-import { isLive } from '../lib/supabaseConfig';
 import { useAuth } from './AuthContext';
-import type { AsyncStatus, CartLine, DeliveryAddress, Order, OrderStatus } from '../types';
+import type { AsyncStatus, CartLine, DeliveryAddress, Order } from '../types';
 
-const DAY = 86_400_000;
-
-/** Mock order history, used only until the Supabase key is in place. */
-const seededOrders: Order[] = [
-{
-  id: 'ord_eg2481',
-  lines: [
-  { productId: 'terea-amber', quantity: 2 },
-  { productId: 'cleopatra-box', quantity: 1 }],
-
-  subtotal: 358,
-  deliveryFee: 25,
-  total: 383,
-  address: addresses[0],
-  status: 'delivered',
-  placedAt: Date.now() - 2 * DAY,
-  etaMinutes: 22,
-  courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' },
-  paymentMethodId: 'pay_cash'
-},
-{
-  id: 'ord_eg1907',
-  lines: [
-  { productId: 'iluma-one', quantity: 1 },
-  { productId: 'iqos-leather-case', quantity: 1 }],
-
-  subtotal: 3350,
-  deliveryFee: 0,
-  total: 3350,
-  address: addresses[1],
-  status: 'delivered',
-  placedAt: Date.now() - 11 * DAY,
-  etaMinutes: 31,
-  courier: { name: 'Karim', vehicle: 'Scooter, MZ-08', initials: 'KM' },
-  paymentMethodId: 'pay_visa'
-}];
-
-
-/** Mock progression — replaced by Supabase Realtime once the key is set. */
-const STATUS_TIMELINE: Array<{status: OrderStatus;afterMs: number;}> = [
-{ status: 'packing', afterMs: 3200 },
-{ status: 'on_the_way', afterMs: 7600 },
-{ status: 'delivered', afterMs: 16000 }];
-
-
-const ORDER_SELECT =
-'id,code,subtotal,delivery_fee,discount,total,address_snapshot,courier_snapshot,payment_method_id,payment_kind,status,eta_minutes,points_earned,placed_at,delivered_at,order_items(product_id,quantity,unit_price)';
+/**
+ * Line items carry their own name and price snapshot, and join `products` only
+ * for the image — so an order still renders correctly after a product is
+ * renamed, repriced or pulled from the shop.
+ */
+export const ORDER_SELECT =
+'id,code,subtotal,delivery_fee,discount,total,address_snapshot,courier_snapshot,payment_method_id,payment_kind,status,eta_minutes,points_earned,placed_at,delivered_at,cancel_reason,order_items(product_id,quantity,unit_price,name_en,name_ar,products(image_url))';
 
 interface PlaceOrderInput {
   lines: CartLine[];
@@ -77,18 +35,15 @@ const OrderContext = createContext<OrderContextValue | null>(null);
 
 export function OrderProvider({ children }: {children: React.ReactNode;}) {
   const { user } = useAuth();
-  const [orders, setOrders] = useState<Order[]>(isLive ? [] : seededOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [status, setStatus] = useState<AsyncStatus>('idle');
   const [serverDelivered, setServerDelivered] = useState<number | null>(null);
-  const timers = useRef<number[]>([]);
   /** Mirrors `orders` so the realtime handler can test membership synchronously. */
   const known = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     known.current = new Set(orders.map((order) => order.id));
   }, [orders]);
-
-  useEffect(() => () => timers.current.forEach((id) => window.clearTimeout(id)), []);
 
   const refreshStats = useCallback(async () => {
     const { data } = await supabase.
@@ -103,7 +58,6 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
     const { data, error } = await supabase.
     from('orders').
     select(ORDER_SELECT).
-    neq('status', 'cancelled').
     order('placed_at', { ascending: false });
     if (error || !data) {
       setStatus('error');
@@ -114,7 +68,6 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   useEffect(() => {
-    if (!isLive) return;
     if (!user) {
       setOrders([]);
       setServerDelivered(null);
@@ -127,7 +80,7 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
 
   /** Live status: `orders` rows for this member push straight into state. */
   useEffect(() => {
-    if (!isLive || !user) return;
+    if (!user) return;
     const channel = supabase.
     channel(`orders:${user.id}`).
     on(
@@ -143,10 +96,11 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
           order.id === row.id ?
           {
             ...order,
-            status: row.status === 'cancelled' ? order.status : row.status ?? order.status,
+            status: row.status ?? order.status,
             etaMinutes: row.eta_minutes ?? order.etaMinutes,
             courier: row.courier_snapshot ?? order.courier,
-            pointsEarned: row.points_earned ?? order.pointsEarned
+            pointsEarned: row.points_earned ?? order.pointsEarned,
+            cancelReason: row.cancel_reason ?? order.cancelReason
           } :
           order
           );
@@ -165,36 +119,7 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
   const placeOrder = useCallback(
     async (input: PlaceOrderInput) => {
       setStatus('loading');
-
-      if (!isLive || !user) {
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        const order: Order = {
-          id: `ord_${Date.now().toString(36)}`,
-          lines: input.lines,
-          subtotal: input.subtotal,
-          deliveryFee: input.deliveryFee,
-          total: input.subtotal + input.deliveryFee,
-          address: input.address,
-          status: 'confirmed',
-          placedAt: Date.now(),
-          etaMinutes: input.address.etaMinutes,
-          courier: { name: 'Dina', vehicle: 'Scooter, NX-42', initials: 'DN' },
-          paymentMethodId: input.paymentMethodId
-        };
-        setOrders((prev) => [order, ...prev]);
-        setStatus('success');
-
-        STATUS_TIMELINE.forEach(({ status: next, afterMs }) => {
-          const timer = window.setTimeout(() => {
-            setOrders((prev) =>
-            prev.map((entry) => entry.id === order.id ? { ...entry, status: next } : entry)
-            );
-          }, afterMs);
-          timers.current.push(timer);
-        });
-
-        return order;
-      }
+      if (!user) throw new Error('AUTH_REQUIRED');
 
       // Totals, stock and the delivery fee are all recomputed inside the RPC —
       // the client values are only used for the optimistic UI before it returns.
@@ -222,7 +147,7 @@ export function OrderProvider({ children }: {children: React.ReactNode;}) {
   );
 
   const activeOrder = useMemo(
-    () => orders.find((order) => order.status !== 'delivered') ?? null,
+    () => orders.find((order) => order.status !== 'delivered' && order.status !== 'cancelled') ?? null,
     [orders]
   );
 

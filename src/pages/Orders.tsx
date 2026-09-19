@@ -6,12 +6,12 @@ import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
 import { ScreenHeader } from '../components/layout/ScreenHeader';
 import { ReceiptSheet } from '../components/order/ReceiptSheet';
-import { products } from '../data/products';
 import { useCart } from '../contexts/CartContext';
 import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useOrders } from '../contexts/OrderContext';
-import { formatOrderDate, formatPrice, localize, orderCode } from '../utils/format';
+import { formatOrderDate, formatPrice, orderCode } from '../utils/format';
+import { lineImage, lineName } from '../utils/orderLine';
 import type { Order } from '../types';
 
 function itemCount(order: Order): number {
@@ -27,8 +27,12 @@ export function Orders() {
   const [receiptId, setReceiptId] = useState<string | null>(null);
 
   const receiptOrder = orders.find((order) => order.id === receiptId) ?? null;
-  const active = orders.filter((order) => order.status !== 'delivered');
-  const past = orders.filter((order) => order.status === 'delivered');
+  const active = orders.filter(
+    (order) => order.status !== 'delivered' && order.status !== 'cancelled'
+  );
+  const past = orders.filter(
+    (order) => order.status === 'delivered' || order.status === 'cancelled'
+  );
 
   const reorder = (order: Order) => {
     order.lines.forEach((line) => add(line.productId, line.quantity));
@@ -36,11 +40,8 @@ export function Orders() {
   };
 
   const renderOrder = (order: Order) => {
-    const isActive = order.status !== 'delivered';
-    const thumbs = order.lines.
-    map((line) => products.find((product) => product.id === line.productId)).
-    filter(Boolean).
-    slice(0, 3);
+    const isActive = order.status !== 'delivered' && order.status !== 'cancelled';
+    const thumbs = order.lines.slice(0, 3);
 
     return (
       <li
@@ -74,11 +75,11 @@ export function Orders() {
 
         <div className="mt-3 flex items-center gap-3">
           <div className="flex -space-x-3 rtl:space-x-reverse">
-            {thumbs.map((product) =>
+            {thumbs.map((line) =>
             <img
-              key={product!.id}
-              src={product!.image}
-              alt={localize(product!.name, locale)}
+              key={line.productId}
+              src={lineImage(line) ?? ''}
+              alt={lineName(line, locale)}
               className="h-10 w-10 rounded-xl border-2 border-ink-800 object-cover" />
 
             )}

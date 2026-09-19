@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { XIcon } from 'lucide-react';
 import { OrderSummary } from '../cart/OrderSummary';
-import { products } from '../../data/products';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocale } from '../../contexts/LocaleContext';
 import { usePayments } from '../../contexts/PaymentContext';
 import { formatOrderDate, formatPrice, localize, orderCode } from '../../utils/format';
+import { lineName, lineTotal } from '../../utils/orderLine';
 import { paymentTitle } from '../../utils/payment';
 import type { Order } from '../../types';
 
@@ -92,22 +92,19 @@ export function ReceiptSheet({ order, onClose }: ReceiptSheetProps) {
             {t('orders.receiptItems')}
           </h3>
           <ul className="flex flex-col gap-2.5 border-b border-ink-700 pb-4">
-            {order.lines.map((line) => {
-              const product = products.find((entry) => entry.id === line.productId);
-              return (
-                <li key={line.productId} className="flex items-center gap-3 text-sm">
-                  <span className="flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-ink-700 px-1 font-display text-[10px] text-white/70">
-                    {line.quantity}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-white/70">
-                    {product ? localize(product.name, locale) : line.productId}
-                  </span>
-                  <span className="font-bold text-white">
-                    {formatPrice((product?.price ?? 0) * line.quantity, locale)}
-                  </span>
-                </li>);
-
-            })}
+            {order.lines.map((line) =>
+            <li key={line.productId} className="flex items-center gap-3 text-sm">
+                <span className="flex h-6 min-w-[24px] items-center justify-center rounded-lg bg-ink-700 px-1 font-display text-[10px] text-white/70">
+                  {line.quantity}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-white/70">
+                  {lineName(line, locale)}
+                </span>
+                <span className="font-bold text-white">
+                  {formatPrice(lineTotal(line), locale)}
+                </span>
+              </li>
+            )}
           </ul>
 
           <div className="pt-4">

@@ -16,6 +16,7 @@ import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
+import { OTP_LENGTH, OTP_RESEND_SECONDS } from '../lib/supabaseConfig';
 import {
   digitsOnly,
   EG_PHONE_LENGTH,
@@ -33,12 +34,16 @@ const ID_LENGTH = 14;
 
 export function Auth() {
   const { t } = useTranslation();
-  const { requestCode, verifyCode, submitIdentity, user, status, signOut } = useAuth();
+  const { requestCode, verifyCode, submitIdentity, user, status, error: authError, signOut } =
+  useAuth();
   const { reset, back, canGoBack } = useNavigation();
+
+  const emptyCode = () => Array.from({ length: OTP_LENGTH }, () => '');
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState(['', '', '', '']);
+  const [code, setCode] = useState<string[]>(emptyCode);
+  const [cooldown, setCooldown] = useState(0);
   const [frontCaptured, setFrontCaptured] = useState(false);
   const [backCaptured, setBackCaptured] = useState(false);
   const [nationalId, setNationalId] = useState('');
@@ -50,6 +55,25 @@ export function Auth() {
   const busy = status === 'loading';
   const onProgress = STEPS.includes(step);
 
+  /** Context errors arrive as translation keys (`invalidCode`, `tooSoon`, …). */
+  const remoteError =
+  status === 'error' && authError ?
+  t(`auth.${authError}`, { defaultValue: t('auth.requestFailed') }) :
+  null;
+  const message = error ?? remoteError;
+
+  /** Supabase throttles OTP sends, so the resend button counts itself down. */
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
+  const sendCode = async () => {
+    await requestCode(phone);
+    setCooldown(OTP_RESEND_SECONDS);
+  };
+
   const submitPhone = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -58,30 +82,60 @@ export function Auth() {
       return;
     }
     try {
-      await requestCode(phone);
+      await sendCode();
+      setCode(emptyCode());
       setStep('code');
       window.setTimeout(() => codeRefs.current[0]?.focus(), 60);
     } catch {
-      setError(t('auth.invalidPhone'));
-    }
+
+      /* `remoteError` already carries the reason from the context. */}
+  };
+
+  const resendCode = async () => {
+    if (cooldown > 0 || busy) return;
+    setError(null);
+    setCode(emptyCode());
+    try {
+      await sendCode();
+      codeRefs.current[0]?.focus();
+    } catch {
+
+      /* handled by `remoteError` */}
   };
 
   const submitCode = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     const ok = await verifyCode(phone, code.join(''));
-    if (ok) setStep('age');else
-    setError(t('auth.invalidCode'));
+    if (ok) setStep('age');
   };
 
   const onCodeChange = (index: number, value: string) => {
-    const digit = digitsOnly(value).slice(-1);
+    const digits = digitsOnly(value);
+    // Pasting the whole code into any box fills the row.
+    if (digits.length > 1) {
+      setCode((prev) => {
+        const next = [...prev];
+        digits.
+        slice(0, OTP_LENGTH - index).
+        split('').
+        forEach((digit, offset) => {
+          next[index + offset] = digit;
+        });
+        return next;
+      });
+      const last = Math.min(index + digits.length, OTP_LENGTH - 1);
+      codeRefs.current[last]?.focus();
+      return;
+    }
+
+    const digit = digits.slice(-1);
     setCode((prev) => {
       const next = [...prev];
       next[index] = digit;
       return next;
     });
-    if (digit && index < 3) codeRefs.current[index + 1]?.focus();
+    if (digit && index < OTP_LENGTH - 1) codeRefs.current[index + 1]?.focus();
   };
 
   const submitId = (event: React.FormEvent) => {
@@ -324,7 +378,11 @@ export function Auth() {
               <p id="phone-hint" className="mt-2 text-xs text-white/40">
                 {t('auth.phoneHint')}
               </p>
-              {error && <p className="mt-3 text-sm font-bold text-neon-magenta">{error}</p>}
+              {message &&
+            <p role="alert" className="mt-3 text-sm font-bold text-neon-magenta">
+                  {message}
+                </p>
+            }
 
               <div className="mt-auto pt-10">
                 <ChunkyButton
@@ -342,10 +400,10 @@ export function Auth() {
           <form onSubmit={submitCode} className="flex flex-1 flex-col">
               <h2 className="font-display text-4xl leading-tight text-white">{t('auth.codeLabel')}</h2>
               <p className="mt-3 text-[15px] text-white/55" dir="ltr">
-                {t('auth.codeHint', { phone: fullEgyptianPhone(phone) })}
+                {t('auth.codeHint', { phone: fullEgyptianPhone(phone), digits: OTP_LENGTH })}
               </p>
 
-              <div className="mt-10 flex gap-3" dir="ltr">
+              <div className="mt-10 flex gap-2" dir="ltr">
                 {code.map((digit, index) =>
               <input
                 key={index}
@@ -358,20 +416,26 @@ export function Auth() {
                   }
                 }}
                 inputMode="numeric"
-                maxLength={1}
-                aria-label={`Digit ${index + 1}`}
-                className="h-16 w-full rounded-chunk border border-ink-600 bg-ink-800 text-center font-display text-2xl text-white focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40" />
+                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                maxLength={OTP_LENGTH}
+                aria-label={t('auth.codeDigit', { index: index + 1 })}
+                className="h-16 w-full rounded-chunk border border-ink-600 bg-ink-800 text-center font-display text-xl text-white focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40" />
 
               )}
               </div>
-              {error && <p className="mt-3 text-sm font-bold text-neon-magenta">{error}</p>}
+              {message &&
+            <p role="alert" className="mt-3 text-sm font-bold text-neon-magenta">
+                  {message}
+                </p>
+            }
 
               <button
               type="button"
-              className="mt-6 self-start text-sm font-bold text-accent underline-offset-4 hover:underline"
-              onClick={() => setCode(['', '', '', ''])}>
+              disabled={cooldown > 0 || busy}
+              className="mt-6 self-start text-sm font-bold text-accent underline-offset-4 hover:underline disabled:text-white/35 disabled:no-underline"
+              onClick={resendCode}>
               
-                {t('auth.resend')}
+                {cooldown > 0 ? t('auth.resendIn', { seconds: cooldown }) : t('auth.resend')}
               </button>
 
               <div className="mt-auto pt-10">
@@ -466,7 +530,11 @@ export function Auth() {
                 <LockIcon className="h-3.5 w-3.5" />
                 {t('auth.idPrivacy')}
               </p>
-              {error && <p className="mt-3 text-sm font-bold text-neon-magenta">{error}</p>}
+              {message &&
+            <p role="alert" className="mt-3 text-sm font-bold text-neon-magenta">
+                  {message}
+                </p>
+            }
 
               <div className="mt-auto pt-10">
                 <ChunkyButton type="submit" size="lg" fullWidth>

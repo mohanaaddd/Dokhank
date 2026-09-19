@@ -85,9 +85,9 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $
   select value ->> p_field from public.app_settings where key = p_key;
-$$;
+$;
 
 -- ── views ───────────────────────────────────────────────────────────────────
 -- security_invoker keeps RLS in force, so a member only ever sees their own row.

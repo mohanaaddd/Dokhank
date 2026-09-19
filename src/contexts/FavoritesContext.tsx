@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { FavoriteRow } from '../lib/rows';
 import { supabase } from '../lib/supabase';
-import { isLive } from '../lib/supabaseConfig';
 import { useAuth } from './AuthContext';
 
 interface FavoritesContextValue {
@@ -18,7 +17,6 @@ export function FavoritesProvider({ children }: {children: React.ReactNode;}) {
   const [ids, setIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!isLive) return;
     if (!user) {
       setIds([]);
       return;
@@ -40,7 +38,7 @@ export function FavoritesProvider({ children }: {children: React.ReactNode;}) {
       setIds((prev) =>
       prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
       );
-      if (!isLive || !user) return;
+      if (!user) return;
       if (removing) {
         void supabase.from('favorites').delete().eq('product_id', productId);
       } else {

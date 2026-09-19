@@ -1,9 +1,10 @@
 export type Locale = 'en' | 'ar';
 
-export type AccentName = 'lime' | 'cyan' | 'magenta' | 'amber';
-
 /** Mirrors a Supabase row with `*_en` / `*_ar` localized columns. */
 export type Localized = Record<Locale, string>;
+
+/** Which of the three apps in this bundle a signed-in account sees. */
+export type AppRole = 'customer' | 'courier' | 'owner';
 
 export type CategoryId =
 'vapes' |
@@ -34,12 +35,25 @@ export interface Product {
   reviewCount: number;
   stock: number;
   badge?: ProductBadge;
+  /** Owner console only — inactive products never reach the shop. */
+  isActive?: boolean;
   specs: Array<{label: Localized;value: Localized;}>;
 }
 
 export interface CartLine {
   productId: string;
   quantity: number;
+}
+
+/**
+ * A line on a placed order. `order_items` snapshots the name and price at the
+ * time of purchase, so an order renders correctly even after the product is
+ * renamed, repriced or deactivated.
+ */
+export interface OrderLine extends CartLine {
+  name?: Localized;
+  image?: string;
+  unitPrice?: number;
 }
 
 export type AddressLabel = 'home' | 'work' | 'other';
@@ -74,15 +88,21 @@ export interface PaymentMethod {
   removable: boolean;
 }
 
-export type OrderStatus = 'confirmed' | 'packing' | 'on_the_way' | 'delivered';
+export type OrderStatus = 'confirmed' | 'packing' | 'on_the_way' | 'delivered' | 'cancelled';
 
-export const ORDER_FLOW: OrderStatus[] = ['confirmed', 'packing', 'on_the_way', 'delivered'];
+/** The happy path. `cancelled` is an exit, not a step, so it is not in here. */
+export const ORDER_FLOW: Array<Exclude<OrderStatus, 'cancelled'>> = [
+'confirmed',
+'packing',
+'on_the_way',
+'delivered'];
+
 
 export interface Order {
   id: string;
   /** Human order code from the backend, e.g. `#EG2481`. */
   code?: string;
-  lines: CartLine[];
+  lines: OrderLine[];
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -92,8 +112,53 @@ export interface Order {
   etaMinutes: number;
   courier: {name: string;vehicle: string;initials: string;};
   paymentMethodId: string;
+  paymentKind?: PaymentKind;
   /** Loyalty points credited when the order was delivered. */
   pointsEarned?: number;
+  cancelReason?: string;
+}
+
+/** An order as ops sees it: who ordered, who is carrying it, why it died. */
+export interface OpsOrder extends Order {
+  customerName: string;
+  customerPhone: string;
+  courierId: string | null;
+}
+
+export interface CourierRecord {
+  id: string;
+  name: string;
+  initials: string;
+  phone: string;
+  vehicle: string;
+  status: 'offline' | 'idle' | 'assigned' | 'delivering';
+  zoneId: string | null;
+  rating: number;
+  linked: boolean;
+}
+
+export interface RevenueDay {
+  day: string;
+  orders: number;
+  delivered: number;
+  revenue: number;
+}
+
+export interface TopProduct {
+  productId: string;
+  name: Localized;
+  units: number;
+  revenue: number;
+}
+
+export interface StoreSnapshot {
+  revenueToday: number;
+  revenueYesterday: number;
+  revenue7d: number;
+  revenuePrev7d: number;
+  revenue30d: number;
+  ordersToday: number;
+  orders30d: number;
 }
 
 export interface UserProfile {
@@ -106,13 +171,17 @@ export interface UserProfile {
   ageVerified: boolean;
   /** Last four digits of the national ID used for age verification. */
   idLastFour?: string;
+  /** Server-owned. Decides which of the three shells mounts at sign-in. */
+  role: AppRole;
 }
 
 /** Finite navigation states — no router, the machine owns the screen graph. */
 export type Screen =
+// shared
 {name: 'welcome';} |
-{name: 'auth';} |
-{name: 'home';} |
+{name: 'auth';}
+// customer
+| {name: 'home';} |
 {name: 'search';} |
 {name: 'product';productId: string;} |
 {name: 'cart';} |
@@ -123,10 +192,23 @@ export type Screen =
 {name: 'tracking';orderId: string;} |
 {name: 'delivered';orderId: string;} |
 {name: 'orders';} |
-{name: 'profile';};
+{name: 'profile';}
+// courier
+| {name: 'courier_queue';}
+/** Param-less: the courier can only ever carry one order at a time. */ |
+{name: 'courier_active';} |
+{name: 'courier_profile';}
+// owner
+| {name: 'owner_orders';} |
+{name: 'owner_order';orderId: string;} |
+{name: 'owner_catalog';} |
+{name: 'owner_product';productId: string | null;} |
+{name: 'owner_insights';} |
+{name: 'owner_profile';} |
+{name: 'owner_couriers';};
 
 export type ScreenName = Screen['name'];
 
-export type TabName = 'home' | 'search' | 'profile';
+export type TabName = ScreenName;
 
 export type AsyncStatus = 'idle' | 'loading' | 'success' | 'error';

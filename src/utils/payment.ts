@@ -1,6 +1,16 @@
-import type { PaymentMethod } from '../types';
+import { BanknoteIcon, CreditCardIcon, SmartphoneIcon } from 'lucide-react';
+import type { PaymentKind, PaymentMethod } from '../types';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+/** Cash on delivery is the system method every account is bootstrapped with. */
+export const CASH_KIND: PaymentKind = 'cash';
+
+export const PAYMENT_ICONS: Record<PaymentKind, typeof BanknoteIcon> = {
+  cash: BanknoteIcon,
+  card: CreditCardIcon,
+  instapay: SmartphoneIcon
+};
 
 export function paymentTitle(method: PaymentMethod, t: Translate): string {
   if (method.kind === 'card') return `${method.brand ?? 'Card'} •••• ${method.last4 ?? '0000'}`;

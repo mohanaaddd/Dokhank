@@ -10,7 +10,7 @@ import {
   LayersIcon,
   ZapIcon } from
 'lucide-react';
-import { categories } from '../../data/products';
+import { useCatalog } from '../../hooks/useCatalog';
 import { localize } from '../../utils/format';
 import type { CategoryId, Locale } from '../../types';
 
@@ -35,6 +35,7 @@ interface CategoryRailProps {
 
 export function CategoryRail({ value, locale, showFavorites = false, onChange }: CategoryRailProps) {
   const { t } = useTranslation();
+  const { categories } = useCatalog();
 
   const entries: Array<{id: FilterId;label: string;Icon: typeof ZapIcon;}> = [
   { id: 'all', label: t('home.all'), Icon: LayersIcon },

@@ -1,9 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { addresses as seeded } from '../data/addresses';
 import { addressFromRow, addressToRow } from '../lib/mappers';
 import type { AddressRow } from '../lib/rows';
 import { supabase } from '../lib/supabase';
-import { isLive } from '../lib/supabaseConfig';
 import { useAuth } from './AuthContext';
 import type { DeliveryAddress } from '../types';
 
@@ -21,10 +19,9 @@ const ADDRESS_SELECT =
 
 export function AddressProvider({ children }: {children: React.ReactNode;}) {
   const { user } = useAuth();
-  const [addresses, setAddresses] = useState<DeliveryAddress[]>(isLive ? [] : seeded);
+  const [addresses, setAddresses] = useState<DeliveryAddress[]>([]);
 
   useEffect(() => {
-    if (!isLive) return;
     if (!user) {
       setAddresses([]);
       return;
@@ -51,16 +48,14 @@ export function AddressProvider({ children }: {children: React.ReactNode;}) {
         if (exists) return prev.map((entry) => entry.id === address.id ? address : entry);
         return [address, ...prev];
       });
-      if (isLive && user) {
-        void supabase.from('addresses').upsert(addressToRow(address, user.id));
-      }
+      if (user) void supabase.from('addresses').upsert(addressToRow(address, user.id));
     },
     [user]
   );
 
   const removeAddress = useCallback((id: string) => {
     setAddresses((prev) => prev.filter((entry) => entry.id !== id));
-    if (isLive) void supabase.from('addresses').delete().eq('id', id);
+    void supabase.from('addresses').delete().eq('id', id);
   }, []);
 
   const value = useMemo<AddressContextValue>(

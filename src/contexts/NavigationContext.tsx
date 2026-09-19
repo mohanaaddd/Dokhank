@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
-import type { Screen, TabName } from '../types';
-import { canNavigate, tabForScreen } from '../utils/navigationMachine';
+import type { AppRole, Screen, TabName } from '../types';
+import { canNavigate, graphFor, tabForScreen, type NavGraph } from '../utils/navigationMachine';
 
 interface NavState {
   stack: Screen[];
@@ -8,8 +8,8 @@ interface NavState {
 }
 
 type NavAction =
-{type: 'push';screen: Screen;} |
-{type: 'replace';screen: Screen;} |
+{type: 'push';screen: Screen;graph: NavGraph;} |
+{type: 'replace';screen: Screen;graph: NavGraph;} |
 {type: 'reset';screen: Screen;} |
 {type: 'back';};
 
@@ -18,11 +18,11 @@ function reducer(state: NavState, action: NavAction): NavState {
 
   switch (action.type) {
     case 'push':{
-        if (!canNavigate(current.name, action.screen.name)) return state;
+        if (!canNavigate(action.graph, current.name, action.screen.name)) return state;
         return { stack: [...state.stack, action.screen], direction: 1 };
       }
     case 'replace':{
-        if (!canNavigate(current.name, action.screen.name)) return state;
+        if (!canNavigate(action.graph, current.name, action.screen.name)) return state;
         return { stack: [...state.stack.slice(0, -1), action.screen], direction: 1 };
       }
     case 'reset':
@@ -41,6 +41,9 @@ interface NavigationContextValue {
   direction: 1 | -1;
   canGoBack: boolean;
   activeTab: TabName | null;
+  tabs: TabName[];
+  /** False on full-bleed screens — the shell hides the tab bar. */
+  showNav: boolean;
   navigate: (screen: Screen) => void;
   replace: (screen: Screen) => void;
   reset: (screen: Screen) => void;
@@ -51,17 +54,29 @@ interface NavigationContextValue {
 const NavigationContext = createContext<NavigationContextValue | null>(null);
 
 export function NavigationProvider({
+  role,
   initialScreen,
   children
 
 
 
-}: {initialScreen: Screen;children: React.ReactNode;}) {
-  const [state, dispatch] = useReducer(reducer, { stack: [initialScreen], direction: 1 });
+
+}: {role: AppRole;initialScreen?: Screen;children: React.ReactNode;}) {
+  const graph = useMemo(() => graphFor(role), [role]);
+  const [state, dispatch] = useReducer(reducer, {
+    stack: [initialScreen ?? graph.initial],
+    direction: 1
+  });
   const screen = state.stack[state.stack.length - 1];
 
-  const navigate = useCallback((next: Screen) => dispatch({ type: 'push', screen: next }), []);
-  const replace = useCallback((next: Screen) => dispatch({ type: 'replace', screen: next }), []);
+  const navigate = useCallback(
+    (next: Screen) => dispatch({ type: 'push', screen: next, graph }),
+    [graph]
+  );
+  const replace = useCallback(
+    (next: Screen) => dispatch({ type: 'replace', screen: next, graph }),
+    [graph]
+  );
   const reset = useCallback((next: Screen) => dispatch({ type: 'reset', screen: next }), []);
   const back = useCallback(() => dispatch({ type: 'back' }), []);
 
@@ -75,14 +90,16 @@ export function NavigationProvider({
       screen,
       direction: state.direction,
       canGoBack: state.stack.length > 1,
-      activeTab: tabForScreen(screen),
+      activeTab: tabForScreen(graph, screen),
+      tabs: graph.tabs,
+      showNav: !graph.fullscreen.includes(screen.name),
       navigate,
       replace,
       reset,
       back,
       goToTab
     }),
-    [screen, state.direction, state.stack.length, navigate, replace, reset, back, goToTab]
+    [screen, state.direction, state.stack.length, graph, navigate, replace, reset, back, goToTab]
   );
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;

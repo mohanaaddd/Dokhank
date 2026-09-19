@@ -9,8 +9,8 @@ import { ScreenHeader } from '../components/layout/ScreenHeader';
 import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { useOrders } from '../contexts/OrderContext';
-import { products } from '../data/products';
-import { formatPrice, localize, orderCode } from '../utils/format';
+import { formatPrice, orderCode } from '../utils/format';
+import { lineImage, lineName } from '../utils/orderLine';
 
 const courierStart = { x: 0.12, y: 0.2 };
 
@@ -39,7 +39,10 @@ export function Tracking({ orderId }: {orderId: string;}) {
 
   }
 
-  const progress = { confirmed: 0, packing: 0.25, on_the_way: 0.65, delivered: 1 }[order.status];
+  const cancelled = order.status === 'cancelled';
+  const progress = { confirmed: 0, packing: 0.25, on_the_way: 0.65, delivered: 1, cancelled: 0 }[
+  order.status];
+
   const courier = {
     x: courierStart.x + (order.address.x - courierStart.x) * progress,
     y: courierStart.y + (order.address.y - courierStart.y) * progress
@@ -73,8 +76,15 @@ export function Tracking({ orderId }: {orderId: string;}) {
             <p className="font-display text-[10px] tracking-[0.2em] text-white/45">
               {t(`tracking.${order.status}`)}
             </p>
-            <p className="mt-1 font-display text-2xl text-accent">
-              {t('tracking.eta', { count: order.etaMinutes })}
+            <p
+              className={[
+              'mt-1 font-display text-2xl',
+              cancelled ? 'text-neon-magenta' : 'text-accent'].
+              join(' ')}>
+              
+              {cancelled ?
+              order.cancelReason || t('tracking.cancelledBody') :
+              t('tracking.eta', { count: order.etaMinutes })}
             </p>
           </div>
           <p className="pb-1 font-display text-sm text-white/60">
@@ -120,22 +130,22 @@ export function Tracking({ orderId }: {orderId: string;}) {
             {t('tracking.contents')}
           </h2>
           <ul className="flex flex-col gap-2">
-            {order.lines.map((line) => {
-              const product = products.find((entry) => entry.id === line.productId);
-              if (!product) return null;
-              return (
-                <li
-                  key={line.productId}
-                  className="flex items-center gap-3 rounded-chunk border border-ink-600/70 bg-ink-800/50 p-2.5">
-                  
-                  <img src={product.image} alt="" className="h-12 w-12 rounded-xl bg-ink-950 object-cover" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-white">
-                    {localize(product.name, locale)}
-                  </span>
-                  <span className="font-display text-xs text-white/50">×{line.quantity}</span>
-                </li>);
-
-            })}
+            {order.lines.map((line) =>
+            <li
+              key={line.productId}
+              className="flex items-center gap-3 rounded-chunk border border-ink-600/70 bg-ink-800/50 p-2.5">
+              
+                <img
+                src={lineImage(line) ?? ''}
+                alt=""
+                className="h-12 w-12 rounded-xl bg-ink-950 object-cover" />
+              
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-white">
+                  {lineName(line, locale)}
+                </span>
+                <span className="font-display text-xs text-white/50">×{line.quantity}</span>
+              </li>
+            )}
           </ul>
         </section>
       </div>

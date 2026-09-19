@@ -6,11 +6,10 @@ import { ChunkyButton } from '../components/ui/ChunkyButton';
 import { NeonBadge } from '../components/ui/NeonBadge';
 import { QuantityStepper } from '../components/ui/QuantityStepper';
 import { ScreenHeader } from '../components/layout/ScreenHeader';
-import { categories } from '../data/products';
 import { useCart } from '../contexts/CartContext';
 import { useLocale } from '../contexts/LocaleContext';
 import { useNavigation } from '../contexts/NavigationContext';
-import { useProduct } from '../hooks/useCatalog';
+import { useCatalog, useProduct } from '../hooks/useCatalog';
 import { formatPrice, localize } from '../utils/format';
 
 const badgeTone = { new: 'cyan', hot: 'magenta', low_stock: 'amber' } as const;
@@ -21,6 +20,7 @@ export function ProductDetail({ productId }: {productId: string;}) {
   const { locale } = useLocale();
   const { back, navigate } = useNavigation();
   const { add, count, quantityOf, setQuantity } = useCart();
+  const { categories } = useCatalog();
   const product = useProduct(productId);
 
   const [justAdded, setJustAdded] = useState(false);

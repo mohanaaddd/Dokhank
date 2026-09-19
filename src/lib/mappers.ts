@@ -1,16 +1,27 @@
 import type {
+  CourierRecord,
   DeliveryAddress,
+  OpsOrder,
   Order,
+  OrderLine,
   PaymentMethod,
   Product,
+  RevenueDay,
+  StoreSnapshot,
+  TopProduct,
   UserProfile } from
 '../types';
 import type {
   AddressRow,
+  CourierRow,
+  OpsOrderRow,
   OrderRow,
+  OwnerTodayRow,
   PaymentMethodRow,
   ProductRow,
-  ProfileRow } from
+  ProfileRow,
+  RevenueDayRow,
+  TopProductRow } from
 './rows';
 import { toLatLng } from './geo';
 
@@ -41,7 +52,8 @@ export function profileToUser(row: ProfileRow): UserProfile {
     initials: row.initials || initialsFrom(row.name),
     points: row.points ?? 0,
     ageVerified: row.age_verified,
-    idLastFour: row.id_last_four ?? undefined
+    idLastFour: row.id_last_four ?? undefined,
+    role: row.role ?? 'customer'
   };
 }
 
@@ -60,9 +72,36 @@ export function productFromRow(row: ProductRow): Product {
     reviewCount: row.review_count ?? 0,
     stock: row.stock ?? 0,
     badge: row.badge ?? undefined,
+    isActive: row.is_active ?? true,
     specs: specs.map((spec) => ({
       label: pair(spec.label_en, spec.label_ar),
       value: pair(spec.value_en, spec.value_ar)
+    }))
+  };
+}
+
+/** The payload `fn_owner_update_product` expects. */
+export function productToRow(product: Product) {
+  return {
+    id: product.id,
+    name_en: product.name.en,
+    name_ar: product.name.ar,
+    tagline_en: product.tagline.en,
+    tagline_ar: product.tagline.ar,
+    description_en: product.description.en,
+    description_ar: product.description.ar,
+    price: product.price,
+    compare_at_price: product.compareAtPrice ?? null,
+    image_url: product.image,
+    category_id: product.category,
+    stock: product.stock,
+    badge: product.badge ?? null,
+    is_active: product.isActive ?? true,
+    specs: product.specs.map((spec) => ({
+      label_en: spec.label.en,
+      label_ar: spec.label.ar,
+      value_en: spec.value.en,
+      value_ar: spec.value.ar
     }))
   };
 }
@@ -120,26 +159,86 @@ export function paymentFromRow(row: PaymentMethodRow): PaymentMethod {
   };
 }
 
+function linesFromRow(row: OrderRow): OrderLine[] {
+  return (row.order_items ?? []).map((item) => ({
+    productId: item.product_id,
+    quantity: item.quantity,
+    unitPrice: item.unit_price === undefined ? undefined : num(item.unit_price),
+    name: item.name_en ? pair(item.name_en, item.name_ar ?? null) : undefined,
+    image: item.products?.image_url
+  }));
+}
+
 export function orderFromRow(row: OrderRow): Order {
   const snapshot = row.address_snapshot as unknown as DeliveryAddress;
   return {
     id: row.id,
     code: row.code,
-    lines: (row.order_items ?? []).map((item) => ({
-      productId: item.product_id,
-      quantity: item.quantity
-    })),
+    lines: linesFromRow(row),
     subtotal: num(row.subtotal),
     deliveryFee: num(row.delivery_fee),
     total: num(row.total),
     address: snapshot,
-    // `cancelled` has no screen in the customer app and is filtered out of the
-    // query, but keep the narrowing honest for the realtime payload path.
-    status: row.status === 'cancelled' ? 'confirmed' : row.status,
+    status: row.status,
     placedAt: new Date(row.placed_at).getTime(),
     etaMinutes: row.eta_minutes,
     courier: row.courier_snapshot ?? UNASSIGNED_COURIER,
     paymentMethodId: row.payment_method_id ?? '',
-    pointsEarned: row.points_earned ?? 0
+    paymentKind: row.payment_kind,
+    pointsEarned: row.points_earned ?? 0,
+    cancelReason: row.cancel_reason ?? undefined
+  };
+}
+
+export function opsOrderFromRow(row: OpsOrderRow): OpsOrder {
+  return {
+    ...orderFromRow(row),
+    customerName: row.profiles?.name ?? '—',
+    customerPhone: row.profiles?.phone ?? '',
+    courierId: row.courier_id
+  };
+}
+
+export function courierFromRow(row: CourierRow): CourierRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    initials: row.initials || initialsFrom(row.name),
+    phone: row.phone,
+    vehicle: row.vehicle,
+    status: row.status,
+    zoneId: row.zone_id,
+    rating: num(row.rating, 5),
+    linked: Boolean(row.user_id)
+  };
+}
+
+export function revenueDayFromRow(row: RevenueDayRow): RevenueDay {
+  return {
+    day: row.day,
+    orders: Number(row.orders_count) || 0,
+    delivered: Number(row.delivered_count) || 0,
+    revenue: num(row.revenue)
+  };
+}
+
+export function topProductFromRow(row: TopProductRow): TopProduct {
+  return {
+    productId: row.product_id,
+    name: pair(row.name_en, row.name_ar),
+    units: Number(row.units) || 0,
+    revenue: num(row.revenue)
+  };
+}
+
+export function snapshotFromRow(row: OwnerTodayRow): StoreSnapshot {
+  return {
+    revenueToday: num(row.revenue_today),
+    revenueYesterday: num(row.revenue_yesterday),
+    revenue7d: num(row.revenue_7d),
+    revenuePrev7d: num(row.revenue_prev_7d),
+    revenue30d: num(row.revenue_30d),
+    ordersToday: Number(row.orders_today) || 0,
+    orders30d: Number(row.orders_30d) || 0
   };
 }

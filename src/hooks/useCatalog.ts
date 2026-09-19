@@ -9,9 +9,8 @@ import {
 import type { CategoryId, Product } from '../types';
 
 /**
- * Reads the `products` + `product_specs` tables through the shared catalog
- * cache. Components already handle loading and error states, so the swap from
- * mock data changed nothing above this line.
+ * Reads the `products`, `product_specs` and `categories` tables through the
+ * shared catalog cache. Components handle loading and error states above it.
  */
 export function useCatalog() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
@@ -22,6 +21,7 @@ export function useCatalog() {
 
   return {
     items: snapshot.items,
+    categories: snapshot.categories,
     status: snapshot.status,
     retry: () => {
       void loadCatalog(true);
