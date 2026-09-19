@@ -48,7 +48,10 @@ export function profileToUser(row: ProfileRow): UserProfile {
   return {
     id: row.id,
     name: row.name,
-    phone: row.phone,
+    phone: row.phone ?? '',
+    username: row.username,
+    firstName: row.first_name,
+    lastName: row.last_name,
     initials: row.initials || initialsFrom(row.name),
     points: row.points ?? 0,
     ageVerified: row.age_verified,
@@ -120,6 +123,7 @@ export function addressFromRow(row: AddressRow): DeliveryAddress {
     floor: row.floor ?? undefined,
     apartment: row.apartment ?? undefined,
     landmark: row.landmark ?? undefined
+    ,phone: row.phone
   };
 }
 
@@ -144,6 +148,7 @@ export function addressToRow(address: DeliveryAddress, userId: string) {
     apartment: address.apartment ?? null,
     landmark: address.landmark ?? null,
     note: address.note ?? null
+    ,phone: address.phone
   };
 }
 

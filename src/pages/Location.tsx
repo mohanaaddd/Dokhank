@@ -24,7 +24,8 @@ export function Location() {
     line: { en: 'Choose a point on the map', ar: 'اختار نقطة على الخريطة' },
     x: 0.5,
     y: 0.5,
-    etaMinutes: 25
+    etaMinutes: 25,
+    phone: ''
   };
   const [selected, setSelected] = useState<DeliveryAddress>(address ?? saved[0] ?? fallbackAddress);
   const [note, setNote] = useState(address?.note ?? '');
@@ -41,7 +42,8 @@ export function Location() {
       },
       x: point.x,
       y: point.y,
-      etaMinutes: Math.round(16 + point.y * 22)
+      etaMinutes: Math.round(16 + point.y * 22),
+      phone: selected.phone
     });
   };
 

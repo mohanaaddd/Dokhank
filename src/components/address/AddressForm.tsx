@@ -5,6 +5,7 @@ import { ChunkyButton } from '../ui/ChunkyButton';
 import { DeliveryMap } from '../order/DeliveryMap';
 import { useAddresses } from '../../contexts/AddressContext';
 import type { AddressLabel, DeliveryAddress } from '../../types';
+import { digitsOnly, EG_PHONE_LENGTH, formatEgyptianPhone, isValidEgyptianPhone } from '../../utils/format';
 
 const labelOptions: Array<{id: AddressLabel;Icon: typeof HomeIcon;}> = [
 { id: 'home', Icon: HomeIcon },
@@ -35,7 +36,8 @@ export function AddressForm({ onSaved }: AddressFormProps) {
   const [apartment, setApartment] = useState('');
   const [landmark, setLandmark] = useState('');
   const [directions, setDirections] = useState('');
-  const [errors, setErrors] = useState<{street?: string;building?: string;}>({});
+  const [phone, setPhone] = useState('');
+  const [errors, setErrors] = useState<{street?: string;building?: string;phone?: string;}>({});
 
   const coords = toLatLng(point);
 
@@ -48,9 +50,10 @@ export function AddressForm({ onSaved }: AddressFormProps) {
   };
 
   const save = () => {
-    const nextErrors: {street?: string;building?: string;} = {};
+    const nextErrors: {street?: string;building?: string;phone?: string;} = {};
     if (!street.trim()) nextErrors.street = t('address.streetError');
     if (!building.trim()) nextErrors.building = t('address.buildingError');
+    if (!isValidEgyptianPhone(phone)) nextErrors.phone = t('address.phoneError');
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -68,6 +71,7 @@ export function AddressForm({ onSaved }: AddressFormProps) {
       apartment: apartment.trim() || undefined,
       landmark: landmark.trim() || undefined,
       note: directions.trim() || undefined
+      ,phone: `+20 ${formatEgyptianPhone(phone)}`
     };
     saveAddress(address);
     onSaved();
@@ -147,6 +151,17 @@ export function AddressForm({ onSaved }: AddressFormProps) {
             {errors.street &&
             <p className="mt-1.5 text-xs font-bold text-neon-magenta">{errors.street}</p>
             }
+          </div>
+
+          <div>
+            <label htmlFor="address-phone" className={labelClass}>{t('address.phoneLabel')}</label>
+            <div dir="ltr" className="mt-2 flex h-12 overflow-hidden rounded-chunk border border-ink-600 bg-ink-800 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/40">
+              <span className="flex items-center border-e border-ink-600 bg-ink-700/70 px-3 text-sm text-white">🇪🇬 +20</span>
+              <input id="address-phone" type="tel" inputMode="numeric" value={formatEgyptianPhone(phone)}
+                onChange={(event) => setPhone(digitsOnly(event.target.value).slice(0, EG_PHONE_LENGTH))}
+                placeholder="10 1234 5678" className="min-w-0 flex-1 bg-transparent px-3 font-bold text-white placeholder:text-white/25 focus:outline-none" />
+            </div>
+            {errors.phone && <p className="mt-1.5 text-xs font-bold text-neon-magenta">{errors.phone}</p>}
           </div>
 
           <div className="grid grid-cols-3 gap-3">

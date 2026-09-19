@@ -73,6 +73,7 @@ export interface DeliveryAddress {
   floor?: string;
   apartment?: string;
   landmark?: string;
+  phone: string;
 }
 
 export type PaymentKind = 'cash' | 'card' | 'instapay';
@@ -165,7 +166,10 @@ export interface UserProfile {
   id: string;
   name: string;
   /** Stored in full international form, e.g. `+20 10 1234 5678`. */
-  phone: string;
+  phone?: string;
+  username: string;
+  firstName: string;
+  lastName: string;
   initials: string;
   points: number;
   ageVerified: boolean;

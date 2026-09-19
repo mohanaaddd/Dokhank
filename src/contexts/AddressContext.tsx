@@ -15,7 +15,7 @@ interface AddressContextValue {
 const AddressContext = createContext<AddressContextValue | null>(null);
 
 const ADDRESS_SELECT =
-'id,label_en,label_ar,line_en,line_ar,x,y,eta_minutes,kind,building,floor,apartment,landmark,note,is_default';
+'id,label_en,label_ar,line_en,line_ar,x,y,eta_minutes,kind,building,floor,apartment,landmark,note,is_default,phone';
 
 export function AddressProvider({ children }: {children: React.ReactNode;}) {
   const { user } = useAuth();

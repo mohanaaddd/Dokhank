@@ -2,254 +2,109 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { profileToUser } from '../lib/mappers';
 import type { ProfileRow } from '../lib/rows';
 import { errorCode, supabase } from '../lib/supabase';
-import { devCredentials, DEV_OTP_BYPASS, DEV_OTP_CODE } from '../lib/supabaseConfig';
-import { digitsOnly, fullEgyptianPhone, isValidEgyptianPhone } from '../utils/format';
 import type { AsyncStatus, UserProfile } from '../types';
+
+interface SignupInput {
+  username: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  nationalId: string;
+  phone?: string;
+}
 
 interface AuthContextValue {
   user: UserProfile | null;
   initialized: boolean;
   status: AsyncStatus;
   error: string | null;
-  /** Supabase `auth.signInWithOtp`. Takes the 10 national digits. */
-  requestCode: (phone: string) => Promise<void>;
-  /** Supabase `auth.verifyOtp`, then loads the `profiles` row. */
-  verifyCode: (phone: string, code: string) => Promise<UserProfile | null>;
-  updateName: (name: string) => Promise<boolean>;
-  /** Hashes + age-checks the national ID through `fn_submit_identity`. */
-  submitIdentity: (nationalId: string) => Promise<void>;
+  signIn: (username: string, password: string) => Promise<UserProfile | null>;
+  signUp: (input: SignupInput) => Promise<UserProfile | null>;
   signOut: () => void;
+  updateName: (name: string) => Promise<boolean>;
   addPoints: (amount: number) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const syntheticEmail = (username: string) => `${username.trim().toLowerCase()}@auth.dokhan.app`;
+const PROFILE_SELECT = 'id,phone,username,first_name,last_name,name,initials,points,locale,accent,age_verified,id_last_four,is_blocked,role';
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Egyptian mobiles are stored in E.164 for Auth, and pretty-printed on profiles. */
-const e164 = (phone: string) => `+20${digitsOnly(phone)}`;
-
-const PROFILE_SELECT =
-'id,phone,name,initials,points,locale,accent,age_verified,id_last_four,is_blocked,role';
-
-export function AuthProvider({ children }: {children: React.ReactNode;}) {
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const mounted = useRef(true);
 
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  const loadProfile = useCallback(async (): Promise<UserProfile | null> => {
+  const loadProfile = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) return null;
-
-    // The signup trigger creates the row; this RPC is the idempotent safety net
-    // for accounts that existed before the migration ran.
+    if (!auth.user) return null;
     await supabase.rpc('fn_ensure_profile');
-
-    const { data, error: profileError } = await supabase.
-    from('profiles').
-    select(PROFILE_SELECT).
-    eq('id', auth.user.id).
-    maybeSingle();
-
-    if (profileError || !data) return null;
+    const { data } = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', auth.user.id).maybeSingle();
+    if (!data) return null;
     const next = profileToUser(data as unknown as ProfileRow);
     if (mounted.current) setUser(next);
     return next;
   }, []);
 
-  /** Restore an existing session on boot and follow Supabase auth events. */
   useEffect(() => {
-    void loadProfile().finally(() => {
-      if (mounted.current) setInitialized(true);
+    mounted.current = true;
+    void loadProfile().finally(() => mounted.current && setInitialized(true));
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setUser(null);
+      else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') void loadProfile();
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        if (mounted.current) setUser(null);
-        return;
-      }
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        void loadProfile();
-      }
-    });
-    return () => subscription.subscription.unsubscribe();
+    return () => { mounted.current = false; data.subscription.unsubscribe(); };
   }, [loadProfile]);
 
-  const requestCode = useCallback(async (phone: string) => {
-    setStatus('loading');
-    setError(null);
+  const signIn = useCallback(async (username: string, password: string) => {
+    setStatus('loading'); setError(null);
+    const result = await supabase.auth.signInWithPassword({ email: syntheticEmail(username), password });
+    if (result.error) { setStatus('error'); setError(errorCode(result.error)); return null; }
+    const profile = await loadProfile();
+    setStatus(profile ? 'success' : 'error');
+    if (!profile) setError('requestFailed');
+    return profile;
+  }, [loadProfile]);
 
-    if (!isValidEgyptianPhone(phone)) {
-      setStatus('error');
-      setError('invalidPhone');
-      throw new Error('invalidPhone');
-    }
-
-    if (DEV_OTP_BYPASS) {
-      await wait(250);
-      setStatus('success');
-      return;
-    }
-
-    // `shouldCreateUser` is what makes the first OTP double as sign-up; the
-    // `on_auth_user_created` trigger then mints the `profiles` row from
-    // `auth.users.phone`.
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      phone: e164(phone),
-      options: { channel: 'sms', shouldCreateUser: true }
+  const signUp = useCallback(async (input: SignupInput) => {
+    setStatus('loading'); setError(null);
+    const username = input.username.trim().toLowerCase();
+    const result = await supabase.auth.signUp({
+      email: syntheticEmail(username),
+      password: input.password,
+      options: { data: { username, first_name: input.firstName.trim(), last_name: input.lastName.trim(), phone: input.phone?.trim() || null } }
     });
-
-    if (otpError) {
-      setStatus('error');
-      setError(errorCode(otpError));
-      throw otpError;
-    }
-    setStatus('success');
-  }, []);
-
-  const verifyCode = useCallback(
-    async (phone: string, code: string) => {
-      setStatus('loading');
-      setError(null);
-      const digits = digitsOnly(phone);
-
-      if (DEV_OTP_BYPASS) {
-        if (code !== DEV_OTP_CODE) {
-          setStatus('error');
-          setError('invalidCode');
-          return null;
-        }
-        const credentials = devCredentials(digits);
-        const metadata = { phone: fullEgyptianPhone(phone) };
-        let signIn = await supabase.auth.signInWithPassword(credentials);
-        if (signIn.error) {
-          const signUp = await supabase.auth.signUp({
-            ...credentials,
-            options: { data: metadata }
-          });
-          if (signUp.error) {
-            setStatus('error');
-            setError(errorCode(signUp.error));
-            return null;
-          }
-          signIn = await supabase.auth.signInWithPassword(credentials);
-          if (signIn.error) {
-            setStatus('error');
-            setError(errorCode(signIn.error));
-            return null;
-          }
-        }
-      } else {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          phone: e164(phone),
-          token: code,
-          type: 'sms'
-        });
-        if (verifyError) {
-          setStatus('error');
-          setError(errorCode(verifyError));
-          return null;
-        }
-      }
-
-      const profile = await loadProfile();
-      if (!profile) {
-        setStatus('error');
-        setError('requestFailed');
-        return null;
-      }
-      setStatus('success');
-      return profile;
-    },
-    [loadProfile]
-  );
+    if (result.error) { setStatus('error'); setError(errorCode(result.error)); return null; }
+    if (!result.data.session) { setStatus('error'); setError('emailConfirmationRequired'); return null; }
+    const { error: identityError } = await supabase.rpc('fn_submit_identity', { p_national_id: input.nationalId });
+    if (identityError) { setStatus('error'); setError(errorCode(identityError)); return null; }
+    const profile = await loadProfile();
+    setStatus(profile ? 'success' : 'error');
+    if (!profile) setError('requestFailed');
+    return profile;
+  }, [loadProfile]);
 
   const updateName = useCallback(async (name: string) => {
     const trimmed = name.trim().replace(/\s+/g, ' ');
-    if (trimmed.split(' ').length < 2) {
-      setError('nameRequired');
-      setStatus('error');
-      return false;
-    }
     const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) return false;
-    const { error: updateError } = await supabase.
-    from('profiles').
-    update({ name: trimmed }).
-    eq('id', auth.user.id);
-    if (updateError) {
-      setError('requestFailed');
-      setStatus('error');
-      return false;
-    }
-    await loadProfile();
-    setStatus('success');
-    return true;
+    if (!auth.user || trimmed.split(' ').length < 2) return false;
+    const { error: updateError } = await supabase.from('profiles').update({ name: trimmed }).eq('id', auth.user.id);
+    if (updateError) { setStatus('error'); setError(errorCode(updateError)); return false; }
+    await loadProfile(); return true;
   }, [loadProfile]);
 
-  const submitIdentity = useCallback(async (nationalId: string) => {
-    setStatus('loading');
-    setError(null);
-
-    const { data, error: rpcError } = await supabase.rpc('fn_submit_identity', {
-      p_national_id: nationalId
-    });
-
-    if (rpcError) {
-      // Never reject: the onboarding screen advances on resolve and the order
-      // RPC is the real gate, so a failed check simply leaves the account
-      // unverified with the reason surfaced in `error`.
-      setStatus('error');
-      setError(errorCode(rpcError));
-      return;
-    }
-
-    const result = (data ?? {}) as {status?: string;reason?: string;};
-    if (result.status !== 'approved') {
-      setError(result.reason ?? 'idNumberError');
-      setStatus('error');
-      await loadProfile();
-      return;
-    }
-
-    await loadProfile();
-    setStatus('success');
-  }, [loadProfile]);
-
-  const signOut = useCallback(() => {
-    setUser(null);
-    setStatus('idle');
-    setError(null);
-    void supabase.auth.signOut();
-  }, []);
-
-  /**
-   * Optimistic locally, authoritative on the server: `fn_add_review_points`
-   * clamps the amount and caps how much a member can earn this way.
-   */
+  const signOut = useCallback(() => { setUser(null); setStatus('idle'); setError(null); void supabase.auth.signOut(); }, []);
   const addPoints = useCallback((amount: number) => {
     setUser((prev) => prev ? { ...prev, points: prev.points + amount } : prev);
     void supabase.rpc('fn_add_review_points', { p_amount: amount });
   }, []);
-
-  const value = useMemo<AuthContextValue>(
-    () => ({ user, initialized, status, error, requestCode, verifyCode, updateName, submitIdentity, signOut, addPoints }),
-    [user, initialized, status, error, requestCode, verifyCode, updateName, submitIdentity, signOut, addPoints]
-  );
-
+  const value = useMemo(() => ({ user, initialized, status, error, signIn, signUp, signOut, updateName, addPoints }), [user, initialized, status, error, signIn, signUp, signOut, updateName, addPoints]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  return context;
 }

@@ -71,13 +71,11 @@ grant usage on schema public to postgres, anon, authenticated, service_role;
 grant create on schema public to postgres, service_role;
 comment on schema public is 'standard public schema';
 
--- ── 5 · optional: wipe test accounts ────────────────────────────────────────
--- Profiles are gone, so any existing auth user will get a fresh profile on its
--- next sign-in via `fn_ensure_profile`. Uncomment to start from zero accounts
--- (this also invalidates every active session).
---
--- delete from auth.users;
+-- ── 5 · wipe test accounts ──────────────────────────────────────────────────
+-- The username/password redesign requires a clean auth namespace. The trigger
+-- was removed above, so deleting auth users cannot recreate public profiles.
+delete from auth.users;
 
--- ── 6 · optional: empty the storage buckets ─────────────────────────────────
--- delete from storage.objects
--- where bucket_id in ('product-images', 'avatars', 'id-docs', 'delivery-proofs');
+-- ── 6 · storage files ───────────────────────────────────────────────────────
+-- Storage protects direct SQL deletes. Remove old files through the Storage API
+-- if a completely empty bucket is required; migrations recreate the policies.

@@ -3,8 +3,8 @@
 Project: `iwwjbeiivtfxyujxmzma` → `https://iwwjbeiivtfxyujxmzma.supabase.co`
 
 Everything the app needs is in this folder. There are **seven** SQL files and they must be applied
-in order. Sign-in runs on real Supabase phone OTP, so an SMS provider is required before anyone can
-log in (§3).
+in order. Sign-in uses username/password accounts backed by synthetic Supabase email identities;
+email confirmation must be disabled for the synthetic domain (§3).
 
 > **Rotate your keys.** The service-role key and personal access token were pasted into a chat.
 > Dashboard → Project Settings → API → *Reveal / Generate new* service role key, and Account →
@@ -24,8 +24,9 @@ Dashboard → **SQL Editor** → paste each file, run, confirm success before th
 | 3 | `migrations/20260918092000_rls.sql` | revokes the default grants, adds column grants + RLS policies |
 | 4 | `migrations/20260918093000_storage_realtime.sql` | 4 storage buckets, storage policies, realtime publication |
 | 5 | `migrations/20260919090000_roles_owner.sql` | `app_role` enum, `profiles.role`, owner/courier guards, owner views + write RPCs, `product-images` upload policy |
-| 6 | `seed.sql` | categories, 14 products, 42 specs, 3 zones, 2 demo couriers, settings |
-| 7 | `migrations/20260918094000_cron.sql` | **optional** — enable pg_cron first (Database → Extensions) |
+| 6 | `migrations/20260919210000_auth_redesign.sql` | nullable account phone, username/password identity, required address phone, hashed national ID |
+| 7 | `seed.sql` | categories, 14 products, 42 specs, 3 zones, 2 demo couriers, settings |
+| 8 | `migrations/20260918094000_cron.sql` | **optional** — enable pg_cron first (Database → Extensions) |
 
 Or, with the CLI: `supabase link --project-ref iwwjbeiivtfxyujxmzma && supabase db push && supabase db execute --file supabase/seed.sql`
 
@@ -38,19 +39,16 @@ Files 1–4 are **not** re-runnable on their own: their `create type`, `create t
 aborts on the first duplicate. File 5, `seed.sql` and the cron file are idempotent and can be
 re-run freely.
 
-To overwrite cleanly, run **`RESET.sql` first**, then files 1 → 7 again:
+To overwrite cleanly, run **`RESET.sql` first**, then files 1 → 8 again:
 
 ```text
-RESET.sql   →  drops the signup trigger, this project's storage policies,
-               any scheduled cron jobs, and `schema public` (cascade),
-               then recreates the empty schema with the standard grants.
+RESET.sql   →  drops the signup trigger, deletes auth users and this project's
+               storage files/policies, removes scheduled cron jobs, and drops
+               `schema public` (cascade), then recreates the empty schema.
 ```
 
-`RESET.sql` destroys all application data — orders, addresses, profiles, catalog edits. It leaves
-`auth.users`, the storage buckets and the files inside them untouched; two commented blocks at the
-bottom of the file wipe those too if you want a truly blank project. Existing accounts survive a
-reset and get a fresh `profiles` row on their next sign-in via `fn_ensure_profile` — but they come
-back as `customer`, so **re-run the owner promotion in §4** afterwards.
+`RESET.sql` destroys all application data — orders, addresses, profiles, catalog edits, auth users,
+and project storage files. Storage buckets remain available for the migrations to reuse.
 
 ## 2 · Roles
 
@@ -62,33 +60,20 @@ at sign-in, and `fn_is_owner()` / `fn_is_courier()` gate every ops read and writ
 
 Dashboard → **Authentication**:
 
-- **Providers → Phone: ON.** Attach an SMS provider — Twilio, Twilio Verify, MessageBird, Vonage, or
-  a local Egyptian aggregator (SMSMisr, Victory Link) through the *Send SMS* auth hook. **Without a
-  provider, no one can sign in**: there is no fallback in the client any more.
-- **Phone → OTP length: 6**, expiry 600s. If you change the length, change `OTP_LENGTH` in
-  `lib/supabaseConfig.ts` to match — the code boxes are generated from it.
-- **Phone → "Confirm phone" / enable phone signups: ON.** The first OTP doubles as sign-up
-  (`shouldCreateUser: true`), and the `on_auth_user_created` trigger mints the `profiles` row from
-  `auth.users.phone`.
-- **Rate limits** (Auth → Rate Limits): the default is 30 SMS/hour per project. The resend button in
-  the app enforces a 60s cooldown client-side; the server is still the authority and its "for
-  security purposes" error is surfaced as *Too many attempts*.
-- **Providers → Email**: only needed if you turn the offline bypass back on (`DEV_OTP_BYPASS = true`
-  in `lib/supabaseConfig.ts`, which maps a phone to a synthetic `eg<digits>@dokhan.dev` account).
-  That path needs **"Confirm email" OFF**. It is off by default now.
+- **Providers → Email: ON** and **Confirm email: OFF.** Signup must return an active session
+  immediately because the client calls `fn_submit_identity` in the same flow.
+- **Providers → Phone: OFF** unless phone login is retained for an administrative migration.
+- **Password minimum length:** keep it at 8 or higher to match the client validation.
 - **URL configuration**: add the published app URL.
-
-Testing without spending SMS: Auth → Providers → Phone → **Test OTP** lets you register a fixed
-number/code pair (e.g. `201012345678` → `123456`) that verifies without sending anything.
 
 ## 4 · Make yourself the owner
 
-Sign in once on the phone number you want to own the store, then run this from the SQL editor
+Sign up once with the username you want to own the store, then run this from the SQL editor
 (service role — the RPC refuses anyone else):
 
 ```sql
-select public.fn_set_role('+201012345678', 'owner');   -- or just the trailing digits
-select public.fn_set_role('+201099999999', 'courier'); -- for a rider account
+select public.fn_set_role('<owner-username>', 'owner');
+select public.fn_set_role('<courier-username>', 'courier');
 ```
 
 Sign out and back in (or reload) and the owner console replaces the shop. This is the only door into
@@ -176,3 +161,14 @@ select phone, role from public.profiles where role <> 'customer';
   been created moments earlier in an optimistic client write.
 - **National IDs are hashed with core `sha256()` + a fixed salt.** Swap in pgcrypto HMAC with a
   secret from Vault when the ID pipeline goes live.
+## Authentication
+
+Customer sign-in uses a username and password. The client maps usernames to
+synthetic Supabase email identities in the `auth.dokhan.app` domain; customers
+never see or manage those addresses. Signup collects first/last name, username,
+password, national ID, and an optional account phone. `fn_submit_identity`
+validates age and stores only a salted hash plus the national-ID last four, with
+a unique hash index.
+
+An account phone is optional, but every saved delivery address has its own
+required phone number so a courier always has a reachable delivery contact.

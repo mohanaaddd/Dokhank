@@ -17,7 +17,10 @@ type Num = string | number;
 
 export interface ProfileRow {
   id: string;
-  phone: string;
+  phone: string | null;
+  username: string;
+  first_name: string;
+  last_name: string;
   name: string;
   initials: string;
   points: number;
@@ -81,6 +84,7 @@ export interface AddressRow {
   landmark: string | null;
   note: string | null;
   is_default: boolean;
+  phone: string;
 }
 
 export interface PaymentMethodRow {
