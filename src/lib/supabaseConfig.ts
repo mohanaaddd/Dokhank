@@ -12,8 +12,7 @@ export const SUPABASE_PROJECT_ID = 'iwwjbeiivtfxyujxmzma';
 export const SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 
 /** Anon / publishable key — safe to ship in the bundle, guarded by RLS. */
-export const SUPABASE_ANON_KEY =
-'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3d2piZWlpdnRmeHl1anhtem1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MjkwODUsImV4cCI6MjEwNTMwNTA4NX0.dnKFP6M9ZOcU54C9r3_6oYcvpd-tD2mzxKojYqgV0DI';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3d2piZWlpdnRmeHl1anhtem1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MjkwODUsImV4cCI6MjEwNTMwNTA4NX0.dnKFP6M9ZOcU54C9r3_6oYcvpd-tD2mzxKojYqgV0DI';
 
 /** True once the key is in place. */
 export const isLive = SUPABASE_ANON_KEY.trim().length > 20;
