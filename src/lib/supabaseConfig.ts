@@ -25,7 +25,7 @@ export const isLive = SUPABASE_ANON_KEY.trim().length > 20;
  * and every RLS policy still behave exactly as they do in production. The
  * bypass needs Auth → Providers → Email with "Confirm email" turned OFF.
  */
-export const DEV_OTP_BYPASS: boolean = false;
+export const DEV_OTP_BYPASS = false;
 
 /** The code the dev bypass accepts. Ignored when `DEV_OTP_BYPASS` is false. */
 export const DEV_OTP_CODE = '1234';

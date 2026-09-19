@@ -128,14 +128,16 @@ function CustomerStack({ children }: {children: React.ReactNode;}) {
 }
 
 function RoleRouter({ startAtOnboarding }: {startAtOnboarding: boolean;}) {
-  const { user } = useAuth();
+  const { user, initialized } = useAuth();
+  if (!initialized) return null;
   const role = user?.role ?? 'customer';
+  const needsOnboarding = Boolean(user && (user.name === 'Dokhan' || !user.ageVerified));
 
   const navigation =
   <NavigationProvider
     key={user ? `${role}:${user.id}` : `anon:${startAtOnboarding}`}
     role={role}
-    initialScreen={user ? undefined : startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
+    initialScreen={user ? needsOnboarding ? { name: 'auth' } : undefined : startAtOnboarding ? { name: 'welcome' } : { name: 'home' }}>
     
       <AppShell>
         <ScreenRouter />

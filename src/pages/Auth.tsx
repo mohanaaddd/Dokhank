@@ -25,16 +25,16 @@ import {
   isValidEgyptianPhone } from
 '../utils/format';
 
-type Step = 'phone' | 'code' | 'age' | 'id' | 'processing' | 'done';
+type Step = 'phone' | 'code' | 'name' | 'age' | 'id' | 'processing' | 'done';
 
 /** Only the steps the member actively fills in show on the progress bar. */
-const STEPS: Step[] = ['phone', 'code', 'age', 'id'];
+const STEPS: Step[] = ['phone', 'code', 'name', 'age', 'id'];
 
 const ID_LENGTH = 14;
 
 export function Auth() {
   const { t } = useTranslation();
-  const { requestCode, verifyCode, submitIdentity, user, status, error: authError, signOut } =
+  const { requestCode, verifyCode, updateName, submitIdentity, user, status, error: authError, signOut } =
   useAuth();
   const { reset, back, canGoBack } = useNavigation();
 
@@ -47,10 +47,18 @@ export function Auth() {
   const [frontCaptured, setFrontCaptured] = useState(false);
   const [backCaptured, setBackCaptured] = useState(false);
   const [nationalId, setNationalId] = useState('');
+  const [name, setName] = useState('');
   const [checkIndex, setCheckIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const codeRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    setName(user.name === 'Dokhan' ? '' : user.name);
+    if (user.name === 'Dokhan') setStep('name');
+    else if (!user.ageVerified) setStep('age');
+  }, [user]);
 
   const busy = status === 'loading';
   const onProgress = STEPS.includes(step);
@@ -106,8 +114,14 @@ export function Auth() {
   const submitCode = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    const ok = await verifyCode(phone, code.join(''));
-    if (ok) setStep('age');
+    const profile = await verifyCode(phone, code.join(''));
+    if (profile) setStep(profile.name === 'Dokhan' ? 'name' : profile.ageVerified ? 'done' : 'age');
+  };
+
+  const submitName = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    if (await updateName(name)) setStep('age');
   };
 
   const onCodeChange = (index: number, value: string) => {
@@ -447,6 +461,30 @@ export function Auth() {
                 disabled={code.some((digit) => !digit)}>
                 
                   {t('auth.verify')}
+                </ChunkyButton>
+              </div>
+            </form> :
+          step === 'name' ?
+          <form onSubmit={submitName} className="flex flex-1 flex-col">
+              <p className="font-display text-[11px] tracking-[0.28em] text-neon-cyan">
+                {t('auth.nameKicker')}
+              </p>
+              <h2 className="mt-3 font-display text-4xl leading-tight text-white">{t('auth.nameTitle')}</h2>
+              <p className="mt-4 text-[15px] leading-relaxed text-white/55">{t('auth.nameBody')}</p>
+              <label htmlFor="full-name" className="mt-10 block text-xs font-bold uppercase tracking-[0.14em] text-white/45">
+                {t('auth.nameLabel')}
+              </label>
+              <input
+                id="full-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoComplete="name"
+                placeholder={t('auth.namePlaceholder')}
+                className="mt-2 h-14 w-full rounded-chunk border border-ink-600 bg-ink-800 px-4 text-lg font-bold text-white placeholder:text-white/25 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40" />
+              {message && <p role="alert" className="mt-3 text-sm font-bold text-neon-magenta">{message}</p>}
+              <div className="mt-auto pt-10">
+                <ChunkyButton type="submit" size="lg" fullWidth loading={busy} disabled={name.trim().split(/\s+/).filter(Boolean).length < 2}>
+                  {t('auth.nameContinue')}
                 </ChunkyButton>
               </div>
             </form> :

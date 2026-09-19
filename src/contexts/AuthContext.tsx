@@ -8,12 +8,14 @@ import type { AsyncStatus, UserProfile } from '../types';
 
 interface AuthContextValue {
   user: UserProfile | null;
+  initialized: boolean;
   status: AsyncStatus;
   error: string | null;
   /** Supabase `auth.signInWithOtp`. Takes the 10 national digits. */
   requestCode: (phone: string) => Promise<void>;
   /** Supabase `auth.verifyOtp`, then loads the `profiles` row. */
-  verifyCode: (phone: string, code: string) => Promise<boolean>;
+  verifyCode: (phone: string, code: string) => Promise<UserProfile | null>;
+  updateName: (name: string) => Promise<boolean>;
   /** Hashes + age-checks the national ID through `fn_submit_identity`. */
   submitIdentity: (nationalId: string) => Promise<void>;
   signOut: () => void;
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -65,7 +68,9 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
 
   /** Restore an existing session on boot and follow Supabase auth events. */
   useEffect(() => {
-    void loadProfile();
+    void loadProfile().finally(() => {
+      if (mounted.current) setInitialized(true);
+    });
     const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         if (mounted.current) setUser(null);
@@ -120,7 +125,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
         if (code !== DEV_OTP_CODE) {
           setStatus('error');
           setError('invalidCode');
-          return false;
+          return null;
         }
         const credentials = devCredentials(digits);
         const metadata = { phone: fullEgyptianPhone(phone) };
@@ -133,13 +138,13 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
           if (signUp.error) {
             setStatus('error');
             setError(errorCode(signUp.error));
-            return false;
+            return null;
           }
           signIn = await supabase.auth.signInWithPassword(credentials);
           if (signIn.error) {
             setStatus('error');
             setError(errorCode(signIn.error));
-            return false;
+            return null;
           }
         }
       } else {
@@ -151,7 +156,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
         if (verifyError) {
           setStatus('error');
           setError(errorCode(verifyError));
-          return false;
+          return null;
         }
       }
 
@@ -159,13 +164,36 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
       if (!profile) {
         setStatus('error');
         setError('requestFailed');
-        return false;
+        return null;
       }
       setStatus('success');
-      return true;
+      return profile;
     },
     [loadProfile]
   );
+
+  const updateName = useCallback(async (name: string) => {
+    const trimmed = name.trim().replace(/\s+/g, ' ');
+    if (trimmed.split(' ').length < 2) {
+      setError('nameRequired');
+      setStatus('error');
+      return false;
+    }
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) return false;
+    const { error: updateError } = await supabase.
+    from('profiles').
+    update({ name: trimmed }).
+    eq('id', auth.user.id);
+    if (updateError) {
+      setError('requestFailed');
+      setStatus('error');
+      return false;
+    }
+    await loadProfile();
+    setStatus('success');
+    return true;
+  }, [loadProfile]);
 
   const submitIdentity = useCallback(async (nationalId: string) => {
     setStatus('loading');
@@ -213,8 +241,8 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, error, requestCode, verifyCode, submitIdentity, signOut, addPoints }),
-    [user, status, error, requestCode, verifyCode, submitIdentity, signOut, addPoints]
+    () => ({ user, initialized, status, error, requestCode, verifyCode, updateName, submitIdentity, signOut, addPoints }),
+    [user, initialized, status, error, requestCode, verifyCode, updateName, submitIdentity, signOut, addPoints]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

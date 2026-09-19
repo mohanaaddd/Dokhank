@@ -18,7 +18,15 @@ export function Location() {
   const { addresses: saved } = useAddresses();
   const { address, setAddress } = useCart();
 
-  const [selected, setSelected] = useState<DeliveryAddress>(address ?? saved[0]);
+  const fallbackAddress: DeliveryAddress = {
+    id: 'pin',
+    label: { en: 'Pinned location', ar: 'الموقع المحدد' },
+    line: { en: 'Choose a point on the map', ar: 'اختار نقطة على الخريطة' },
+    x: 0.5,
+    y: 0.5,
+    etaMinutes: 25
+  };
+  const [selected, setSelected] = useState<DeliveryAddress>(address ?? saved[0] ?? fallbackAddress);
   const [note, setNote] = useState(address?.note ?? '');
   const [locating, setLocating] = useState(false);
 

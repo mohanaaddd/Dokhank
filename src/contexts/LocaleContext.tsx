@@ -15,6 +15,13 @@ interface LocaleContextValue {
 }
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
+const LOCALE_STORAGE_KEY = 'dokhan-locale';
+const ACCENT_STORAGE_KEY = 'dokhan-accent';
+
+function storedLocale(fallback: Locale): Locale {
+  const value = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  return value === 'en' || value === 'ar' ? value : fallback;
+}
 
 interface LocaleProviderProps {
   initialLocale: Locale;
@@ -28,19 +35,14 @@ interface LocaleProviderProps {
  * reads the session straight off the Supabase client instead of through a hook.
  */
 export function LocaleProvider({ initialLocale, initialAccent, children }: LocaleProviderProps) {
-  const [locale, setLocaleState] = useState<Locale>(initialLocale);
-  const [accent, setAccentState] = useState<AccentName>(initialAccent);
+  const [locale, setLocaleState] = useState<Locale>(() => storedLocale(initialLocale));
+  const [accent, setAccentState] = useState<AccentName>(() => {
+    const value = window.localStorage.getItem(ACCENT_STORAGE_KEY);
+    return value === 'lime' || value === 'cyan' || value === 'magenta' || value === 'amber' ? value : initialAccent;
+  });
   const userId = useRef<string | null>(null);
 
-  useMemo(() => initI18n(initialLocale), [initialLocale]);
-
-  useEffect(() => {
-    setLocaleState(initialLocale);
-  }, [initialLocale]);
-
-  useEffect(() => {
-    setAccentState(initialAccent);
-  }, [initialAccent]);
+  useMemo(() => initI18n(storedLocale(initialLocale)), [initialLocale]);
 
   useEffect(() => {
     if (i18n.language !== locale) i18n.changeLanguage(locale);
@@ -85,6 +87,7 @@ export function LocaleProvider({ initialLocale, initialAccent, children }: Local
   const setLocale = useCallback(
     (next: Locale) => {
       setLocaleState(next);
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
       persist({ locale: next });
     },
     [persist]
@@ -93,6 +96,7 @@ export function LocaleProvider({ initialLocale, initialAccent, children }: Local
   const setAccent = useCallback(
     (next: AccentName) => {
       setAccentState(next);
+      window.localStorage.setItem(ACCENT_STORAGE_KEY, next);
       persist({ accent: next });
     },
     [persist]
