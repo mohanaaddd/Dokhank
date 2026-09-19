@@ -26,6 +26,10 @@ insert into public.zones (name_en, name_ar, min_lat, max_lat, min_lng, max_lng, 
 select 'Greater Cairo', 'القاهرة الكبرى', 29.90, 30.20, 31.10, 31.50, 25, '10:00', '02:00', 100
 where not exists (select 1 from public.zones where name_en = 'Greater Cairo');
 
+insert into public.zones (name_en, name_ar, min_lat, max_lat, min_lng, max_lng, delivery_fee, opens_at, closes_at, sort_order)
+select 'Mansoura', 'المنصورة', 31.00, 31.10, 31.30, 31.45, 25, '10:00', '02:00', 5
+where not exists (select 1 from public.zones where name_en = 'Mansoura');
+
 -- ── couriers (dispatch demo riders; the courier app replaces these) ─────────
 insert into public.couriers (name, initials, phone, vehicle, status, rating)
 select 'Dina', 'DN', '+201001234567', 'Scooter, NX-42', 'idle', 4.9
