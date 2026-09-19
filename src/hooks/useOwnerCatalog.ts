@@ -92,11 +92,15 @@ export function useOwnerCatalog() {
 
 /** Uploads to the public `product-images` bucket and returns the public URL. */
 export async function uploadProductImage(productId: string, file: File): Promise<string> {
-  const extension = file.name.split('.').pop() ?? 'jpg';
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${productId}/${Date.now()}.${extension}`;
   const { error } = await supabase.storage.
   from('product-images').
-  upload(path, file, { cacheControl: '3600', upsert: true });
+  upload(path, file, {
+    cacheControl: '3600',
+    contentType: file.type || 'image/jpeg',
+    upsert: false
+  });
   if (error) throw error;
   return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
 }
