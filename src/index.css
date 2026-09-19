@@ -68,6 +68,48 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+.spidey-map .leaflet-tile-pane {
+  filter: brightness(0.48) saturate(0.7) hue-rotate(155deg) contrast(1.15);
+}
+.spidey-map .leaflet-control-attribution {
+  background: rgba(6, 16, 36, 0.85);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+}
+.spidey-map .leaflet-control-attribution a {
+  color: #7ed6e2;
+}
+.spidey-marker-wrap {
+  background: transparent;
+  border: 0;
+}
+.spidey-marker {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--marker-color);
+  border-radius: 10px;
+  background: rgba(6, 16, 36, 0.94);
+  box-shadow: 0 0 14px var(--marker-color);
+  font-size: 17px;
+  line-height: 1;
+}
+.spidey-marker-pulse::before {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border: 2px solid var(--marker-color);
+  border-radius: 14px;
+  content: '';
+  opacity: 0.4;
+  animation: spidey-pulse 1.8s ease-out infinite;
+}
+@keyframes spidey-pulse {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(1.2); opacity: 0; }
+}
 .text-glow {
   text-shadow: 0 0 18px rgba(184, 255, 60, 0.35);
 }

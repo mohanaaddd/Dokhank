@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
+import L from 'leaflet';
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
-interface Marker {
+interface MarkerPoint {
   x: number;
   y: number;
   tone?: 'accent' | 'cyan' | 'magenta';
@@ -9,128 +12,91 @@ interface Marker {
 }
 
 interface DeliveryMapProps {
-  markers: Marker[];
+  markers: MarkerPoint[];
   onPick?: (point: {x: number;y: number;}) => void;
   className?: string;
   height?: string;
+  locateKey?: number;
 }
 
-const toneColor = {
-  accent: 'var(--accent)',
-  cyan: '#22E4F5',
-  magenta: '#FF3DCB'
-} as const;
+const CAIRO_CENTER: L.LatLngExpression = [30.0444, 31.2357];
+const MAP_BOUNDS = {
+  north: 30.18,
+  south: 29.85,
+  west: 30.95,
+  east: 31.55
+};
 
-/** Street lattice for the stylised night-city tracker board. */
-const STREETS_X = [18, 46, 74, 102, 130, 158, 186, 214, 242, 270, 298, 326, 354, 382];
-const STREETS_Y = [16, 40, 64, 88, 112, 136, 160, 184, 208, 232];
+function pointToLatLng(point: MarkerPoint): L.LatLngExpression {
+  return [
+    MAP_BOUNDS.north - point.y * (MAP_BOUNDS.north - MAP_BOUNDS.south),
+    MAP_BOUNDS.west + point.x * (MAP_BOUNDS.east - MAP_BOUNDS.west)
+  ];
+}
 
-const BLOCKS = [
-{ x: 20, y: 18, w: 82, h: 44 },
-{ x: 214, y: 18, w: 110, h: 44 },
-{ x: 216, y: 114, w: 82, h: 68 },
-{ x: 22, y: 138, w: 80, h: 70 },
-{ x: 300, y: 160, w: 76, h: 48 }];
-
-
-export function DeliveryMap({ markers, onPick, className = '', height = 'h-56' }: DeliveryMapProps) {
-  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onPick) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    onPick({
-      x: Math.min(0.96, Math.max(0.04, (event.clientX - rect.left) / rect.width)),
-      y: Math.min(0.94, Math.max(0.06, (event.clientY - rect.top) / rect.height))
-    });
+function latLngToPoint(lat: number, lng: number) {
+  return {
+    x: Math.min(0.96, Math.max(0.04, (lng - MAP_BOUNDS.west) / (MAP_BOUNDS.east - MAP_BOUNDS.west))),
+    y: Math.min(0.94, Math.max(0.06, (MAP_BOUNDS.north - lat) / (MAP_BOUNDS.north - MAP_BOUNDS.south)))
   };
+}
+
+function markerIcon(marker: MarkerPoint) {
+  const color = marker.tone === 'cyan' ? '#22E4F5' : marker.tone === 'magenta' ? '#FF3DCB' : 'var(--accent)';
+  const emoji = marker.tone === 'cyan' ? '🚬' : '🧑‍🚬';
+  return L.divIcon({
+    className: 'spidey-marker-wrap',
+    html: `<span class="spidey-marker${marker.pulse ? ' spidey-marker-pulse' : ''}" style="--marker-color:${color}">${emoji}</span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  });
+}
+
+function ClickHandler({ onPick }: {onPick?: DeliveryMapProps['onPick'];}) {
+  useMapEvents({
+    click(event) {
+      onPick?.(latLngToPoint(event.latlng.lat, event.latlng.lng));
+    }
+  });
+  return null;
+}
+
+function DeviceLocation({ locateKey, onPick }: {locateKey: number;onPick?: DeliveryMapProps['onPick'];}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!locateKey || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        map.setView([latitude, longitude], 14, { animate: true });
+        onPick?.(latLngToPoint(latitude, longitude));
+      },
+      () => undefined,
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, [locateKey, map, onPick]);
+
+  return null;
+}
+
+export function DeliveryMap({ markers, onPick, className = '', height = 'h-56', locateKey = 0 }: DeliveryMapProps) {
+  const icons = useMemo(() => markers.map(markerIcon), [markers]);
 
   return (
-    <div
-      onClick={handleClick}
-      role={onPick ? 'button' : 'img'}
-      tabIndex={onPick ? 0 : undefined}
-      aria-label="Delivery map"
-      className={[
-      'relative w-full overflow-hidden rounded-chunk border-2 border-[#1E5A72] bg-[#0A1433]',
-      onPick ? 'cursor-crosshair' : '',
-      height,
-      className].
-      join(' ')}>
-      
-      <svg viewBox="0 0 400 240" className="absolute inset-0 h-full w-full" aria-hidden>
-        <rect width="400" height="240" fill="#0A1433" />
-
-        {BLOCKS.map((block) =>
-        <rect
-          key={`${block.x}-${block.y}`}
-          x={block.x}
-          y={block.y}
-          width={block.w}
-          height={block.h}
-          fill="rgba(126,214,226,0.05)" />
-
+    <div className={['relative w-full overflow-hidden rounded-chunk border-2 border-[#1E5A72] bg-[#0A1433]', height, className].join(' ')}>
+      <MapContainer center={CAIRO_CENTER} zoom={12} zoomControl={false} className="h-full w-full spidey-map">
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ClickHandler onPick={onPick} />
+        <DeviceLocation locateKey={locateKey} onPick={onPick} />
+        {markers.map((marker, index) =>
+          <Marker key={`${marker.x}-${marker.y}-${index}`} position={pointToLatLng(marker)} icon={icons[index]} />
         )}
-
-        {/* The river, cut through the grid */}
-        <path
-          d="M138 -8 C150 52 118 104 148 150 L166 248 L204 248 L182 150 C156 106 188 54 172 -8 Z"
-          fill="#061024" />
-        
-        <path
-          d="M138 -8 C150 52 118 104 148 150 L166 248"
-          fill="none"
-          stroke="rgba(126,214,226,0.28)"
-          strokeWidth="1" />
-        
-
-        {STREETS_X.map((x) =>
-        <line key={`vx-${x}`} x1={x} y1="0" x2={x} y2="240" stroke="rgba(126,214,226,0.13)" strokeWidth="1" />
-        )}
-        {STREETS_Y.map((y) =>
-        <line key={`hy-${y}`} x1="0" y1={y} x2="400" y2={y} stroke="rgba(126,214,226,0.13)" strokeWidth="1" />
-        )}
-
-        {/* Arterials + ring road */}
-        <path d="M0 64 H400" fill="none" stroke="rgba(126,214,226,0.34)" strokeWidth="2.5" />
-        <path d="M0 184 H400" fill="none" stroke="rgba(126,214,226,0.26)" strokeWidth="2" />
-        <path d="M242 0 V240" fill="none" stroke="rgba(126,214,226,0.3)" strokeWidth="2.5" />
-        <path
-          d="M30 24 H370 V214 H30 Z"
-          fill="none"
-          stroke="rgba(126,214,226,0.22)"
-          strokeWidth="2" />
-        
-        <path d="M0 8 L120 112 L260 40 L400 132" fill="none" stroke="rgba(126,214,226,0.18)" strokeWidth="2" />
-      </svg>
-
-      {markers.map((marker, index) =>
-      <div
-        key={`${marker.x}-${marker.y}-${index}`}
-        className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-        style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}>
-        
-          {marker.pulse &&
-        <span
-          className="absolute inset-0 -m-2 animate-pulse-ring rounded-[10px]"
-          style={{ backgroundColor: toneColor[marker.tone ?? 'accent'], opacity: 0.3 }} />
-
-        }
-          <span
-          className="relative flex h-7 w-7 items-center justify-center rounded-[8px] border-2 text-[14px] leading-none"
-          style={{
-            borderColor: toneColor[marker.tone ?? 'accent'],
-            backgroundColor: 'rgba(6,16,36,0.92)',
-            boxShadow: `0 0 14px ${toneColor[marker.tone ?? 'accent']}`
-          }}>
-          
-            <span aria-hidden>🚬</span>
-          </span>
-          {marker.label &&
-        <span className="absolute start-1/2 top-8 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-[#1E5A72] bg-[#061024]/95 px-2 py-0.5 font-display text-[9px] tracking-widest text-white">
-              {marker.label}
-            </span>
-        }
-        </div>
-      )}
-    </div>);
-
+      </MapContainer>
+      <div className="pointer-events-none absolute inset-0 z-[400] rounded-[inherit] bg-[#061024]/35 mix-blend-multiply" />
+    </div>
+  );
 }

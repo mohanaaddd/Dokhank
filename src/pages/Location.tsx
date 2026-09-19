@@ -29,6 +29,7 @@ export function Location() {
   const [selected, setSelected] = useState<DeliveryAddress>(address ?? saved[0] ?? fallbackAddress);
   const [note, setNote] = useState(address?.note ?? '');
   const [locating, setLocating] = useState(false);
+  const [locateKey, setLocateKey] = useState(0);
 
   const pickPoint = (point: {x: number;y: number;}) => {
     setSelected({
@@ -46,10 +47,8 @@ export function Location() {
 
   const useCurrent = () => {
     setLocating(true);
-    window.setTimeout(() => {
-      pickPoint({ x: 0.47, y: 0.55 });
-      setLocating(false);
-    }, 900);
+    setLocateKey((value) => value + 1);
+    window.setTimeout(() => setLocating(false), 10000);
   };
 
   const confirm = () => {
@@ -68,6 +67,7 @@ export function Location() {
           <DeliveryMap
             height="h-52"
             onPick={pickPoint}
+            locateKey={locateKey}
             markers={[{ x: selected.x, y: selected.y, tone: 'accent', pulse: true }]} />
           
           <div className="mt-2 flex items-center justify-between gap-3">
