@@ -43,7 +43,7 @@ function latLngToPoint(lat: number, lng: number) {
 
 function markerIcon(marker: MarkerPoint) {
   const color = marker.tone === 'cyan' ? '#22E4F5' : marker.tone === 'magenta' ? '#FF3DCB' : 'var(--accent)';
-  const emoji = marker.tone === 'cyan' ? '🚬' : '🧑‍🚬';
+  const emoji = marker.tone === 'cyan' ? '🚬' : '👤';
   return L.divIcon({
     className: 'spidey-marker-wrap',
     html: `<span class="spidey-marker${marker.pulse ? ' spidey-marker-pulse' : ''}" style="--marker-color:${color}">${emoji}</span>`,
