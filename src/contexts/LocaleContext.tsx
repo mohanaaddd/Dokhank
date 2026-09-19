@@ -23,6 +23,11 @@ function storedLocale(fallback: Locale): Locale {
   return value === 'en' || value === 'ar' ? value : fallback;
 }
 
+function hasStoredLocale(): boolean {
+  return window.localStorage.getItem(LOCALE_STORAGE_KEY) === 'en' ||
+    window.localStorage.getItem(LOCALE_STORAGE_KEY) === 'ar';
+}
+
 interface LocaleProviderProps {
   initialLocale: Locale;
   initialAccent: AccentName;
@@ -63,7 +68,10 @@ export function LocaleProvider({ initialLocale, initialAccent, children }: Local
     maybeSingle();
     const row = data as {locale?: Locale;accent?: AccentName;} | null;
     if (!row) return;
-    if (row.locale) setLocaleState(row.locale);
+    if (row.locale && !hasStoredLocale()) {
+      setLocaleState(row.locale);
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, row.locale);
+    }
     if (row.accent) setAccentState(row.accent);
   }, []);
 
@@ -87,6 +95,7 @@ export function LocaleProvider({ initialLocale, initialAccent, children }: Local
   const setLocale = useCallback(
     (next: Locale) => {
       setLocaleState(next);
+      void i18n.changeLanguage(next);
       window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
       persist({ locale: next });
     },
